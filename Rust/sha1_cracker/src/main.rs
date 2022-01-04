@@ -1,3 +1,5 @@
+// The SHA-1 hash function should be considered cryptographically broken 
+// and unsuitable for further use in any security critical capacity
 use sha1::Digest;
 
 use std::{env, error::Error, fs};
