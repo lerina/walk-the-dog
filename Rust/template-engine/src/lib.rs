@@ -47,6 +47,33 @@ pub fn check_symbol_string(input: &str, symbol: &str) -> bool {
     input.contains(symbol)
 }
 
+/// takes two parameters and returns the index 
+/// where the second value is found within the first value. 
+/// This makes it easy to split the template string into three parts 
+/// – head, variable, and tail
+pub fn get_index_for_symbol(input: &str, symbol: char) -> (bool, usize) {
+    let mut characters = input.char_indices();
+    let mut does_exist = false;
+    let mut index :usize = 0;
+
+    while let Some((i, c)) = characters.next() {
+        if c == symbol {
+            does_exist = true;
+            index = i;
+            break;
+        }
+    }
+
+    (does_exist, index)
+}
+
+/// This parses an expression with a template variable,
+/// parses it into head, variable, and tail components, and returns the results
+pub fn get_expression_data(input_line: &str) -> ExpressionData {
+    let (_h, i) = get_index_for_symbol(input_line, '{');
+}
+
+
 
 /// Entry point for parser. Accepts an input statement 
 /// and tokenizes it into one of an if tag, a for tag, or a template variable.
@@ -56,6 +83,21 @@ pub fn get_content_type(input_line: &str) -> ContentType {
                         check_symbol_string(&input_line, "in")
                      ) 
                      || check_symbol_string(&input_line, "endfor") ;
+    let is_if_tag = check_symbol_string(&input_line, "if")
+                  || check_symbol_string(&input_line, "endif");
+    
+    let is_template_variable = check_matching_pair(&input_line, "{{", "}}");
+    
+    let content_type;
+
+    if is_tag_expression && is_for_tag { 
+        content_type = ContentType::Tag(TagType::ForTag);
+    } else if is_tag_expression && is_if_tag {
+        content_type = ContentType::Tag(TagType::IfTag);
+    } else if is_template_variable {
+        let content = get_expression_data(&input_line);
+        content_type = ContentType::TemplateVariable(content);
+    }
     //NOTE: tmp_sub
     ContentType::Unrecognized
 }
@@ -64,6 +106,22 @@ pub fn get_content_type(input_line: &str) -> ContentType {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn get_index_for_symbol_test() {
+        assertEq!((true, 3), get_index_for_symbol("Hi {name} , welcome", '{'));
+    }
+
+    #[test]
+    fn get_expression_data_test() {
+        let expression_data = ExpressionData {
+            head: Some("Hi ".to_string()),
+            variable: "name".to_string(),
+            tail: Some(" , welcome".to_string()),
+        };
+
+        assertEq!(expression_data, get_expression_data("Hi {{name}} , welcome"));
+    }
 
     #[test]
     fn check_symbol_string_test() {
