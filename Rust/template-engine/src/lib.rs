@@ -71,6 +71,18 @@ pub fn get_index_for_symbol(input: &str, symbol: char) -> (bool, usize) {
 /// parses it into head, variable, and tail components, and returns the results
 pub fn get_expression_data(input_line: &str) -> ExpressionData {
     let (_h, i) = get_index_for_symbol(input_line, '{');
+    let head = input_line[0..i].to_string();
+
+    let (_j, k) = get_index_for_symbol(input_line, '}');
+    let variable = input_line[i+1 + 1..k].to_string();
+
+    let tail = input_line[k+1 + 1..].to_string();
+
+    ExpressionData {
+        head: Some(head),
+        variable: variable,
+        tail: Some(tail),
+    }
 }
 
 
@@ -97,9 +109,13 @@ pub fn get_content_type(input_line: &str) -> ContentType {
     } else if is_template_variable {
         let content = get_expression_data(&input_line);
         content_type = ContentType::TemplateVariable(content);
+    } else if !is_tag_expression && !is_template_variable {
+        content_type = ContentType::Literal(input_line.to_string());
+    } else {
+        content_type = ContentType::Unrecognized;
     }
-    //NOTE: tmp_sub
-    ContentType::Unrecognized
+
+    content_type
 }
 
 
@@ -109,7 +125,7 @@ mod tests {
 
     #[test]
     fn get_index_for_symbol_test() {
-        assertEq!((true, 3), get_index_for_symbol("Hi {name} , welcome", '{'));
+        assert_eq!((true, 3), get_index_for_symbol("Hi {name} , welcome", '{'));
     }
 
     #[test]
@@ -120,7 +136,7 @@ mod tests {
             tail: Some(" , welcome".to_string()),
         };
 
-        assertEq!(expression_data, get_expression_data("Hi {{name}} , welcome"));
+        assert_eq!(expression_data, get_expression_data("Hi {{name}} , welcome"));
     }
 
     #[test]
