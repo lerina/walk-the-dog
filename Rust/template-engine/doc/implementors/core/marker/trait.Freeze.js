@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["lib"] = [{"text":"impl Freeze for <a class=\"enum\" href=\"lib/enum.ContentType.html\" title=\"enum lib::ContentType\">ContentType</a>","synthetic":true,"types":["lib::ContentType"]},{"text":"impl Freeze for <a class=\"enum\" href=\"lib/enum.TagType.html\" title=\"enum lib::TagType\">TagType</a>","synthetic":true,"types":["lib::TagType"]},{"text":"impl Freeze for <a class=\"struct\" href=\"lib/struct.ExpressionData.html\" title=\"struct lib::ExpressionData\">ExpressionData</a>","synthetic":true,"types":["lib::ExpressionData"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
