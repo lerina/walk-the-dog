@@ -3,6 +3,8 @@
 //! ![template engine design](./pix/Design_of_the_template_engine.png)
 //!
 
+use std::collections::HashMap;
+
 // Data structures
 
 /// ContentType is the main data structure to classify the template string read 
@@ -118,7 +120,29 @@ pub fn get_content_type(input_line: &str) -> ContentType {
     content_type
 }
 
+/// constructs the output html statement consisting of head, text content, and tail. 
+/// To construct the text content, the template variables are replaced with 
+/// the values from the context data
+pub fn generate_html_template_var(content :ExpressionData, context :HashMap<String, String>) -> String {
+    let mut html = String::new();
 
+    if let Some(h) = content.head {
+        html.push_str(&h);
+    }
+
+    if let Some(v) = context.get(&content.variable) {
+        html.push_str(&v);
+    }
+
+    if let Some(t) = content.tail {
+        html.push_str(&t);
+    }
+
+    html
+}
+
+
+// ----------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
