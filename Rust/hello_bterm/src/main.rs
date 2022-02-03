@@ -48,7 +48,14 @@ fn main() -> BError {
     // function. This returns the completed object—or an error—containing your
     // desired system.
 
+    // Now that you’ve created a terminal instance, you need to tell bracket-lib 
+    // to start executing the game loop, and link the engine with your State 
+    // so that bracket-lib knows where the tick() function is located
     main_loop(context, State{})
+
+    // Any error that occurs will be passed out ofmain—causing your program
+    // to crash and display the provided error message. main_loop starts the game
+    // loop and begins calling your tick() function on every frame.
 }
 
 // Results are Rust’s standard method for handling errors. 
