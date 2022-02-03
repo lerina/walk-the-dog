@@ -35,9 +35,72 @@ impl GameState for State {
 // 
 // Setup can fail, so the initialization returns a Result type.
 fn main() -> BError {
+    // the builder pattern is a common Rust idiom is constructing 
+    // complicated objects. 
+    // The builder pattern takes advantage of function chaining 
+    // to separate many options into individual function calls, 
+    // providing more readable code than a giant list of parameters 
+    // to a single function.
     let context = BTermBuilder::simple80x50()
         .with_title("Flappy Dragon")
-        .build()?;
+        .build()?; 
+    // When you’ve finished describing the object you want to create, call a build()
+    // function. This returns the completed object—or an error—containing your
+    // desired system.
 
     main_loop(context, State{})
 }
+
+// Results are Rust’s standard method for handling errors. 
+// Results are an enumeration—just like Option and user made  enumerations 
+//
+// You can handle a Result in three major ways:
+//
+// 1. Result is an enumeration - you can use match to select a response.
+// ```
+// match my_result {
+//     Ok(a) => do_something_useful(a),
+//     Err(a) => handle_error(a),
+// }
+// ```
+//
+// 2. Pass errors to the parent function via ?
+// ```
+// fn my_function() -> BError {
+//      ...
+//      my_result()?;
+// }
+// ```
+//
+// 3. Unwrap like an option - and crash if an error occurred
+// ```
+// fn my_function() -> BError {
+//      ...
+//      my_result.unwrap();
+// }
+// ```
+
+// Calling unwrap is easy, but your program will crash if any error occurs. 
+// When you are using many functions that potentially return an error, 
+// littering your code with unwrap() calls can also make your code hard to read. 
+//
+// Adding match statements for every function that might fail also makes for big, 
+// hard-to-read code. 
+// 
+// The ? mark operator can greatly simplify your code and keep it easy to read. 
+// The only requirement to use? is that your functionmust return a Result type.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
