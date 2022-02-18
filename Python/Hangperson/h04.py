@@ -66,7 +66,7 @@ word_length = len(chosen_word)
 
 #TODO-1: - Create a variable called 'lives' to keep track of the number of lives left. 
 #Set 'lives' to equal 6.
-lives = len(stages)
+lives = len(stages) - 1
 
 #Testing code
 print("\033c") 
@@ -93,7 +93,7 @@ while not end_of_game:
         lives -=1 
 
     #If lives goes down to 0 then the game should stop and it should print "You lose."
-    if lives <= 1:
+    if lives <= 0:
         print("You lose")
         end_of_game = True
 
@@ -107,5 +107,5 @@ while not end_of_game:
         print("You win.")
 
     #TODO-3: - print the ASCII art from 'stages' that corresponds to the current number of 'lives' the user has remaining.
-    print(stages[lives-1])
+    print(stages[lives])
 
