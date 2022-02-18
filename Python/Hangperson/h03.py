@@ -1,10 +1,12 @@
 #Step 2
 
 import random
+num_tries = 6
 word_list = ["aardvark", "baboon", "camel"]
 chosen_word = random.choice(word_list)
 
 #Testing code
+print("\033c")
 print(f'Pssst, the solution is {chosen_word}.')
 
 #TODO-1: - Create an empty List called display.
@@ -16,7 +18,7 @@ for _ in range(len(chosen_word)):
 
 print(display)
 
-while "_" in display:
+while "_" in display and num_tries>0:
     guess = input("Guess a letter: ").lower()[0]
 
     #TODO-2: - Loop through each position in the chosen_word;
@@ -29,7 +31,10 @@ while "_" in display:
 
     #TODO-3: - Print 'display' and you should see the guessed letter in the correct position and every other letter replace with "_".
     #Hint - Don't worry about getting the user to guess the next letter. We'll tackle that in step 3.
+    print("\033c")
     print(display)
+
+    num_tries -=1
 
 if not "_" in display:
     print("You won")
