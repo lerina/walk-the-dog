@@ -10,9 +10,10 @@ secret_word = random.choice(word_list)
 user_guess = (input("Guess a letter: ")).lower()[0]
 
 #TODO-3 - Check if the letter the user guessed (guess) is one of the letters in the chosen_word.
-if user_guess in secret_word:
-    print("Right")
-else:
-    print("Wrong")
+for letter in secret_word:
+    if letter == user_guess:
+        print("Right")
+    else:
+        print("Wrong")
 
 
