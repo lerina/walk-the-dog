@@ -25,7 +25,6 @@ fn main() {
 
     println!("DEBUG: {}", secret_word);
     //TODO-2 - Ask the user to guess a letter and assign their answer to a variable called guess. Make guess lowercase.
-    use std::io;
     print!("Guess a letter: ");
     io::stdout().flush().unwrap();
     let mut user_guess = String::new();
