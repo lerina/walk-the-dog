@@ -6,6 +6,10 @@ fn main() {
     let answer = add_me( double_me(x),  double_me(y) );
     
     println!("{} is the answer", answer);
+
+    //-------------------------------------------
+    let name = "str literal";
+    println!("{}", &name[4..]);
 }
 
 fn  add_me(x: i32, y: i32) -> i32 {
