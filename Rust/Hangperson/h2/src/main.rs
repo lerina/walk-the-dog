@@ -22,6 +22,7 @@ fn main() {
     //TODO-1 - Randomly choose a word from the word_list and assign it to a variable called chosen_word.
     let mut rng = thread_rng();
     let secret_word = word_list.choose(&mut rng).unwrap();
+    let mut mask = vec!['_'; secret_word.len() as usize];
 
     println!("DEBUG: {}", secret_word);
     //TODO-2 - Ask the user to guess a letter and assign their answer to a variable called guess. Make guess lowercase.
@@ -33,15 +34,20 @@ fn main() {
             .expect("Failed to read input");
   //   std::io::stdout().flush();
     //let user_guess = user_guess.chars().next().unwrap(); //[0 as u8];
-    let user_guess = user_guess.chars().next().unwrap().to_lowercase().to_string(); //[0 as u8];
-    
+    let user_guess = user_guess
+                        .trim()
+                        .to_lowercase()
+                        .chars().nth(0)
+                        .unwrap() ;
 
+    for (u, c) in secret_word.chars().enumerate(){
     //TODO-3 - Check if the letter the user guessed (guess) is one of the letters in the chosen_word.
-        if secret_word.contains(&user_guess) {
-            println!("Right");
+        if c == user_guess {
+            mask[u] = c
         } else {
             println!("Wrong");
         }
+   }
    
-
+   println!("mask:{}",mask.iter().collect::<String>());
 }
