@@ -37,7 +37,7 @@ fn main() {
     let user_guess = user_guess
                         .trim()
                         .to_lowercase()
-                        .chars().nth(0)
+                        .chars().next()
                         .unwrap() ;
 
     for (u, c) in secret_word.chars().enumerate(){
