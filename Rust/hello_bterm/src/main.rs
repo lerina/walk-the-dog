@@ -25,7 +25,7 @@ impl GameState for State {
         // the game engine and your game
  
         ctx.cls();
-        ctx.print(1, 1, "Hello, Bracket Terminal!");
+        ctx.print(1, 1, "Greetings from Bracket Terminal!");
     }
 
 } 
