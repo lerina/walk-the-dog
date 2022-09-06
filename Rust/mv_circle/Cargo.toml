@@ -1,0 +1,29 @@
+[package]
+name = "mv_circle"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2.8"
+console_error_panic_hook = "0.1.7"
+rand = "0.8.5"
+getrandom = { version = "0.2", features = ["js"] }
+
+[dependencies.web-sys]
+version = "0.3.58"
+features = [
+    "console", 
+    "Window", 
+    "Document", 
+    "HtmlCanvasElement", 
+    "CanvasRenderingContext2d", 
+    "Element",
+    ]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.32"
+
