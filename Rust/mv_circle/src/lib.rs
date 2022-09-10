@@ -16,7 +16,7 @@ mv dot with kb arrows
     - increase dot x pos if right arrow kb press-release
 
 mv dot in sine wave
-    update dot x,y pos though sinewave function
+    - update dot x,y pos though sinewave function
 */
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -35,56 +35,62 @@ extern "C" {
 #[wasm_bindgen]
 #[derive(Copy, Clone)]
 pub struct Circle {
-    pub center_x: f32, 
-    pub center_y: f32, 
+    pub center_x: f32,
+    pub center_y: f32,
     pub radius: f32,
-    pub start_angle: f32, 
+    pub start_angle: f32,
     pub end_angle: f32,
 }
 
 #[wasm_bindgen]
 impl Circle {
     #[wasm_bindgen(constructor)]
-    pub fn new( center_x: f32, 
-                center_y: f32, 
-                radius: f32, 
-                start_angle: f32, 
-                end_angle: f32,) -> Circle {
-    //  center_x, center_y, radius, 0, 2 * Math.PI, false
+    pub fn new(
+        center_x: f32,
+        center_y: f32,
+        radius: f32,
+        start_angle: f32,
+        end_angle: f32,
+    ) -> Circle {
+        //  center_x, center_y, radius, 0, 2 * Math.PI, false
         Circle {
-            center_x, center_y, radius,
-            start_angle: 0.0, 
+            center_x,
+            center_y,
+            radius,
+            start_angle: 0.0,
             end_angle: 2.0 * std::f32::consts::PI,
         }
     }
 
     pub fn rnd_new() -> Circle {
         let mut rng = thread_rng();
-        let radius = 5.0 * rng.gen::<f32>() * 40.0;
+        let radius = 5.0 * rng.gen::<f32>() * 10.0;
         let center_x: f32 = rng.gen_range((0.0 + radius)..(600.0 - radius));
         let center_y: f32 = rng.gen_range((0.0 + radius)..(600.0 - radius));
         let start_angle: f32 = 0.0;
-        let end_angle: f32 = rng.gen::<f32>() * std::f32::consts::PI * 2.0;
+        let end_angle: f32 = rng.gen::<f32>() * std::f32::consts::PI * 6.2;
         //let counter_clockwise: bool = rng.gen::<bool>();
 
-        Circle::new( center_x,
-                    center_y,
-                    radius,
-                    start_angle,
-                    end_angle,
-                    )
+        Circle::new(center_x, center_y, radius, start_angle, end_angle)
     }
-    
-    pub fn mv_right(&mut self, v: f32, max:f32) {
+
+    pub fn mv_right(&mut self, v: f32, max: f32) {
         if self.center_x + v <= max - self.radius {
+            self.end_angle +=0.1;
+            self.center_y += 4.5 * self.end_angle.sin();
             self.center_x += v;
         }
     }
-    pub fn mv_left(&mut self, v: f32, max:f32) {
-        if self.center_x + v >=self.radius {
+    pub fn mv_left(&mut self, v: f32, max: f32) {
+        if self.center_x + v >= self.radius {
+            self.end_angle -=0.1;
+            self.center_y -= 4.5 * self.end_angle.sin();
             self.center_x += v;
         }
     }
+//    pub fn update(&mut self) {
+//        
+//    }
 }
 
 #[wasm_bindgen(getter_with_clone)]
@@ -98,21 +104,22 @@ pub struct World {
 #[wasm_bindgen]
 impl World {
     #[wasm_bindgen(constructor)]
-    pub fn new(width:f32, height:f32) -> World {
-
-
+    pub fn new(width: f32, height: f32) -> World {
         let circle = Circle::rnd_new();
         let circle_color = "rgba(177, 0, 129, .1)".to_string();
-        World { width, height, circle, circle_color }    
-    }
 
+        World {
+            width,
+            height,
+            circle,
+            circle_color,
+        }
+    }
 }
 
 #[wasm_bindgen(start)]
 pub fn run() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
-    
-
 
     log("Rust wasm initialized!");
 

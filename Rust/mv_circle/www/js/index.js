@@ -8,23 +8,23 @@ async function run() {
     let ctx = canvas.getContext('2d');
     const world = new World(600, 600);
     let circle = world.circle;
-    let sine_circle = new Circle(50.0, 300.0, 100.0, 0.0, 2.0 * Math.PI);
+    let sine_circle = new Circle(10.0, 300.0, 10.0, 0.0, 2.0 * Math.PI);
 
     function keyDown(event) {
             //console.log("anim On: "+ `key=${event.key},code=${event.code}`);
             switch (event.keyCode) {
                 case 37:
                     //'Left Key pressed!';
-                    sine_circle.mv_left(-5.0, 0.0);
-                    console.log("x "+ sine_circle.center_x);
+                    sine_circle.mv_left(-2.5, 0.0);
+                    console.log("y "+ sine_circle.center_y);
                     break;
                 case 38:
                     //'Up Key pressed!';
                     break;
                 case 39:
                     //'Right Key pressed!';
-                    sine_circle.mv_right(5.0, 600.0);
-                    console.log("x "+ sine_circle.center_x);
+                    sine_circle.mv_right(2.5, 600.0);
+                    console.log("y "+ sine_circle.center_y);
                     break;
                 case 40:
                     //'Down Key pressed!';
@@ -32,7 +32,7 @@ async function run() {
             }
     }
     function keyUp(event) {
-            console.log("anim Off: "+ `key=${event.key},code=${event.code}`);
+            //console.log("anim Off: "+ `key=${event.key},code=${event.code}`);
     }
 
     window.addEventListener('keydown', keyDown);
@@ -65,7 +65,7 @@ async function run() {
 	    ctx.fillRect(0, 0, world.width, world.height);
 
         draw_circle();
-        //world.update();
+        //sine_circle.update();
         
 	    // call the draw function again!
 	    requestAnimationFrame(draw);
