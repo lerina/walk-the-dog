@@ -15,20 +15,24 @@ async function run() {
             switch (event.keyCode) {
                 case 37:
                     //'Left Key pressed!';
-                    sine_circle.mv_left(-2.5, 0.0);
+                    sine_circle.mv_left(-2.5, 10.0);
                     console.log("y "+ sine_circle.center_y);
                     break;
                 case 38:
                     //'Up Key pressed!';
+                    sine_circle.mv_up(-2.5, 10.0);
+                    console.log("x "+ sine_circle.center_x);
                     break;
                 case 39:
                     //'Right Key pressed!';
-                    sine_circle.mv_right(2.5, 600.0);
+                    sine_circle.mv_right(2.5, 590.0);
                     console.log("y "+ sine_circle.center_y);
                     break;
                 case 40:
                     //'Down Key pressed!';
-                    break;
+                    sine_circle.mv_down(2.5, 590.0);
+                    console.log("x "+ sine_circle.center_x);
+                     break;
             }
     }
     function keyUp(event) {

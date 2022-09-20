@@ -75,22 +75,40 @@ impl Circle {
     }
 
     pub fn mv_right(&mut self, v: f32, max: f32) {
-        if self.center_x + v <= max - self.radius {
-            self.end_angle +=0.1;
-            self.center_y += 4.5 * self.end_angle.sin();
+        if self.center_x + self.radius < max - self.radius {
+            self.end_angle += 0.1;
+            // we are using radius as the amplitude
+            //self.center_y += self.radius * self.end_angle.sin();
+            self.center_y += v * self.end_angle.sin();
             self.center_x += v;
         }
     }
-    pub fn mv_left(&mut self, v: f32, max: f32) {
-        if self.center_x + v >= self.radius {
-            self.end_angle -=0.1;
-            self.center_y -= 4.5 * self.end_angle.sin();
+    pub fn mv_left(&mut self, v: f32, min: f32) {
+        if self.center_x - self.radius > min + self.radius {
+            self.end_angle -= 0.1;
+            self.center_y -= v * self.end_angle.sin();
             self.center_x += v;
         }
     }
-//    pub fn update(&mut self) {
-//        
-//    }
+    pub fn mv_down(&mut self, v: f32, max: f32) {
+        if self.center_y - self.radius < max - self.radius {
+            self.end_angle += 0.1;
+            // we are using radius as the amplitude
+            //self.center_x += self.radius * self.end_angle.cos();
+            self.center_x += v * self.end_angle.cos();
+            self.center_y += v;
+        }
+    }
+    pub fn mv_up(&mut self, v: f32, min: f32) {
+        if self.center_y + self.radius > min + self.radius { 
+            self.end_angle -= 0.1;
+            self.center_x -= v * self.end_angle.cos();
+            self.center_y += v;
+        }
+    }
+     //    pub fn update(&mut self) {
+    //
+    //    }
 }
 
 #[wasm_bindgen(getter_with_clone)]
