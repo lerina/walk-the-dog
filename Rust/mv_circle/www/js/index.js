@@ -22,6 +22,7 @@ async function run() {
                     //'Up Key pressed!';
                     sine_circle.mv_up(-2.5, 10.0);
                     console.log("x "+ sine_circle.center_x);
+                    event.detail.keyboardEvent.preventDefault();
                     break;
                 case 39:
                     //'Right Key pressed!';
@@ -32,7 +33,9 @@ async function run() {
                     //'Down Key pressed!';
                     sine_circle.mv_down(2.5, 590.0);
                     console.log("x "+ sine_circle.center_x);
-                     break;
+                    // https://github.com/PolymerElements/iron-a11y-keys-behavior/issues/13
+                    event.detail.keyboardEvent.preventDefault();
+                    break;
             }
     }
     function keyUp(event) {
