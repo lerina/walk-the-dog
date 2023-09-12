@@ -24,7 +24,7 @@ Windows users have a separate installer that can be found at
 #### Create the file structure
 
 ```bash
-mkdir -p web/js web/css web/html web/resources/pix web/resources/sound
+mkdir -p www/js www/css www/html www/resources/pix www/resources/sound
 ```
 
 The result should look like this:
@@ -35,7 +35,7 @@ walk-the-dog/
 ├── README.md
 ├── src
 │   └── lib.rs
-└── web
+└── www
     ├── css
     ├── html
     ├── js
@@ -43,3 +43,38 @@ walk-the-dog/
         ├── pix
         └── sound
 ```
+
+### put dummy files for now so that git picks it up
+
+```
+touch web/js/index.js web/css/style.css web/html/index.html web/resources/pix/dummy web/resources/sound/dummy
+```
+
+### The script to simplify development
+
+```bash
+#!/bin/sh
+
+## pre-req a web server
+# cargo install http
+
+## exit on error and  prints each executed command
+set -ex
+
+## compile for plain vanilla no javascript framework 
+wasm-pack build --target web --out-dir www/pkg
+
+## display link for easy access
+echo "Serving at: http://127.0.0.1:8080/html/"
+
+## run the web server
+http -a 127.0.0.1 -p 8080 www
+```
+
+
+Call it `run.sh` and give it `exec` permission
+
+```bash
+chmod +x run.sh
+```
+
