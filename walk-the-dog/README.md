@@ -78,3 +78,14 @@ Call it `run.sh` and give it `exec` permission
 chmod +x run.sh
 ```
 
+### Update Cargo.toml 
+
+```
+...
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+...
+```
