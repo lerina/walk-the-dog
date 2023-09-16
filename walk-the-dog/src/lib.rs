@@ -1,14 +1,11 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+use wasm_bindgen::prelude::*;
+use web_sys::console;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[wasm_bindgen(start)]
+pub fn main_js() -> Result<(), JsValue> {
+    console_error_panic_hook::set_once();
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+    console::log_1(&JsValue::from_str("Hello world!"));
+
+    Ok(())
 }
