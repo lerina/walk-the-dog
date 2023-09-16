@@ -140,5 +140,64 @@ Call it `run.sh` and give it `exec` permission
 ```bash
 chmod +x run.sh
 ```
+## Recap Rust Side
+
+## lib.rs
+
+```rust
+use wasm_bindgen::prelude::*;
+use web_sys::console;
+
+#[wasm_bindgen(start)]
+pub fn main_js() -> Result<(), JsValue> {
+    console_error_panic_hook::set_once();
+
+    console::log_1(&JsValue::from_str("Hello world!"));
+
+    Ok(())
+}
+```
+more on [wasm_bindgen(start)](https://rustwasm.github.io/wasm-bindgen/reference/attributes/on-rust-exports/start.html)
+
+more on [console log](https://rustwasm.github.io/docs/book/reference/debugging.html#logging-with-the-console-apis)
+## Cargo.toml
+
+```toml
+[package]
+name = "walk-the-dog"
+version = "0.1.0"
+categories = ["wasm"]
+readme = "README.md"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+wasm-bindgen = "0.2.87"
+console_error_panic_hook = "0.1.7"
+#web-sys= "0.3.64"
+rand = "0.8.5"
+getrandom = { version = "0.2.10", features = ["js"] }
 
 
+# The `web-sys` crate allows you to interact with the various browser APIs,
+# like the DOM.
+[dependencies.web-sys]
+version = "0.3.64"
+features = ["console",
+           "Window",
+           "Document",
+           "HtmlCanvasElement",
+           "CanvasRenderingContext2d",
+           "Element"]
+
+# These crates are used for running unit tests.
+[dev-dependencies]
+wasm-bindgen-test = "0.3.37"
+futures = "0.3.28"
+js-sys = "0.3.64"
+wasm-bindgen-futures = "0.4.37"
+```
