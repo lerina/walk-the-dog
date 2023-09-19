@@ -45,6 +45,23 @@ js-sys = "0.3.64"
 wasm-bindgen-futures = "0.4.37"
 ```
 
+### Hello world
+
+```rust
+use wasm_bindgen::prelude::*;
+use web_sys::console;
+
+#[wasm_bindgen(start)]
+pub fn main_js() -> Result<(), JsValue> {
+    console_error_panic_hook::set_once();
+
+    console::log_1(&JsValue::from_str("Hello world!"));
+
+    Ok(())
+}
+```
+
+
 ## The web side
 
 #### Create the file structure
@@ -98,7 +115,7 @@ Put this in the `index.js` file. Now we are good to go.
 import init from "../pkg/walk_the_dog.js";
 
 async function run() {
-    const wasm = await init().catch(console.error);
+    const wasm = await init();
     const memory = wasm.memory;
 
 }//^--run
@@ -160,6 +177,48 @@ pub fn main_js() -> Result<(), JsValue> {
 more on [wasm_bindgen(start)](https://rustwasm.github.io/wasm-bindgen/reference/attributes/on-rust-exports/start.html)
 
 more on [console log](https://rustwasm.github.io/docs/book/reference/debugging.html#logging-with-the-console-apis)
+
+
+NOTE: 
+Use `#[wasm_bindgen(start, catch)]` as in 
+
+```rust
+#[wasm_bindgen(start, catch)]
+pub fn main_js() -> Result<(), JsValue> {
+
+    ...
+    Ok(())
+}
+```
+
+instead of `#[wasm_bindgen(start)]`
+
+if you plan to use catch in your Js script like we do here
+
+```js
+import init from "../pkg/walk_the_dog.js";
+
+async function run() {
+    const wasm = await init().catch(console.error);
+    const memory = wasm.memory;
+
+}//^--run
+
+//-------------------
+run();
+```
+
+SOURCE: wasm-bindgen [Result Type](https://rustwasm.github.io/docs/wasm-bindgen/reference/types/result.html)
+
+| Note that if you import a JS function with Result you need 
+| #[wasm_bindgen(catch)] to be annotated on the import 
+| (unlike exported functions, which require no extra annotation). 
+| This may not be necessary in the future though and it may work "as is"!.
+|
+
+
+also see: wasm-bindgen [catch](https://rustwasm.github.io/wasm-bindgen/reference/attributes/on-js-imports/catch.html) 
+
 ## Cargo.toml
 
 ```toml
