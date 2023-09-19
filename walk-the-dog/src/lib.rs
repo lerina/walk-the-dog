@@ -3,8 +3,15 @@ use wasm_bindgen::JsCast;
 use web_sys::console;
 
 
-#[wasm_bindgen(start)]
-pub fn main_js() { // -> Result<(), JsValue> {
+// Note that if you import a JS function with Result you need 
+// #[wasm_bindgen(catch)] to be annotated on the import 
+// (unlike exported functions, which require no extra annotation). 
+// This may not be necessary in the future though and it may work "as is"!.
+// [Result Type](https://rustwasm.github.io/docs/wasm-bindgen/reference/types/result.html)
+// [similar issue that gave the solution](https://github.com/rustwasm/wasm-bindgen/issues/2919)
+
+#[wasm_bindgen(start, catch)]
+pub fn main_js() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
 //    console::log_1(&JsValue::from_str("Hello world!"));
@@ -32,5 +39,5 @@ pub fn main_js() { // -> Result<(), JsValue> {
         context.stroke();
         context.fill();
 
- //   Ok(())
+    Ok(())
 }
