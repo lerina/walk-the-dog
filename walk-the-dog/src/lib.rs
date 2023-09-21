@@ -24,11 +24,39 @@ pub fn main_js() -> Result<(), JsValue> {
                     .unwrap()
                     .dyn_into::<web_sys::CanvasRenderingContext2d>()
                     .unwrap();
+/*
+        let image = web_sys::HtmlImageElement::new().unwrap();
+        image.set_src("../resources/pix/Idle (1).png");
+        
+It turns out you can't draw the image immediately 
+after setting the source of an image element 
+because the image hasn't been loaded yet. 
+In order to wait for the image to be loaded, 
+we'll use the onload callback of HtmlImageElement , 
+which you can set up using set_onload in Rust.
+
+        context.draw_image_with_html_image_element(&image, 0.0, 0.0);
+*/
+
+    wasm_bindgen_futures::spawn_local(async move {
+        let (success_tx, success_rx) = futures::channel::oneshot::channel::<()>();
+        let image = web_sys::HtmlImageElement::new().unwrap();
+        let callback = Closure::once(move || {
+            success_tx.send(());
+            web_sys::console::log_1(&JsValue::from_str("loaded"));
+        });        
+        
+        image.set_onload(Some(callback.as_ref().unchecked_ref()));
+        callback.forget();
+
+        image.set_src("../resources/pix/Idle (1).png");
+        context.draw_image_with_html_image_element(&image, 0.0, 0.0);
 
         sierpinski(&context, 
                    [(300.0, 0.0), (0.0, 600.0), (600.0, 600.0)], 
                    (0, 255, 0), 
                    5);
+        }); //^-- wasm_bindgen_futures::spawn_local()
 
     Ok(())
 }
