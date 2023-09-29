@@ -1,9 +1,15 @@
+/*
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::Mutex;
+*/
+use std::{collections::HashMap, rc::Rc, sync::Mutex};
 use rand::prelude::*;
 use serde::Deserialize;
-use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{console, Response};
+use web_sys::console;
+
 
 #[derive(Deserialize)]
 struct Sheet {
@@ -49,18 +55,48 @@ pub fn main_js() -> Result<(), JsValue> {
     // spawn_local : Runs a Rust Future on the current thread
     // https://github.com/rustwasm/wasm-bindgen/issues/1126
     wasm_bindgen_futures::spawn_local(async move {
-        let (success_tx, success_rx) = futures::channel::oneshot::channel::<()>();
+//        let (success_tx, success_rx) = futures::channel::oneshot::channel::<()>();
+        let (success_tx, success_rx) = futures::channel::oneshot::channel::<Result<(), JsValue>>();
+        let success_tx = Rc::new(Mutex::new(Some(success_tx)));
+        let error_tx = Rc::clone(&success_tx);
+
+
         let image = web_sys::HtmlImageElement::new().unwrap();
-        let callback = Closure::once(move || {
+       /* let callback = Closure::once(move || {
             success_tx.send(());
             web_sys::console::log_1(&JsValue::from_str("loaded"));
         });
+        */
+        let callback = Closure::once(move || {
+            if let Some(success_tx) = success_tx.lock().ok()
+                .and_then(|mut opt| opt.take()) {
+                success_tx.send(Ok(()));
+            }
+            web_sys::console::log_1(&JsValue::from_str("loaded"));
+        });
 
+        let error_callback = Closure::once(move |err| {
+            if let Some(error_tx) = error_tx.lock().ok()
+                .and_then(|mut opt| opt.take()) {
+                    error_tx.send(Err(err));
+            }
+        });
+        
         image.set_onload(Some(callback.as_ref().unchecked_ref()));
-        callback.forget();
+        image.set_onerror(Some(error_callback.as_ref().unchecked_ref()));
 
-        image.set_src("../resources/pix/rhb.png");
+        image.set_src("../resources/pix/Idle (1).png");
+        success_rx.await;
+
         context.draw_image_with_html_image_element(&image, 0.0, 0.0);
+
+        sierpinski(
+            &context,
+            [(300.0, 0.0), (0.0, 600.0), (600.0, 600.0)],
+            (0, 255, 0),
+            5,
+        );
+
         let json = fetch_json("../resources/pix/rhb.json")
             .await
             .expect("Could not fetch rhb.json");
@@ -68,14 +104,32 @@ pub fn main_js() -> Result<(), JsValue> {
             .into_serde()
             .expect("Could not convert rhb.json into a Sheet structure");
 
-        /*
-        sierpinski(
-            &context,
-            [(300.0, 0.0), (0.0, 600.0), (600.0, 600.0)],
-            (0, 255, 0),
-            5,
-        );
-        */
+        let (success_tx, success_rx) = futures::channel::oneshot::channel::<Result<(), JsValue>>();
+        let success_tx = Rc::new(Mutex::new(Some(success_tx)));
+        let error_tx = Rc::clone(&success_tx);
+
+        let image = web_sys::HtmlImageElement::new().unwrap();
+ 
+        let callback = Closure::once(move || {
+            if let Some(success_tx) = success_tx.lock().ok()
+                .and_then(|mut opt| opt.take()) {
+                success_tx.send(Ok(()));
+                web_sys::console::log_1(&JsValue::from_str("sprite"));
+            }
+        });
+
+        let error_callback = Closure::once(move |err| {
+            if let Some(error_tx) = error_tx.lock().ok()
+                .and_then(|mut opt| opt.take()) {
+                    error_tx.send(Err(err));
+            }
+        });
+        
+        image.set_onload(Some(callback.as_ref().unchecked_ref()));
+        image.set_onerror(Some(error_callback.as_ref().unchecked_ref()));
+
+        image.set_src("../resources/pix/rhb.png");
+        success_rx.await;
     }); //^-- wasm_bindgen_futures::spawn_local()
 
     Ok(())

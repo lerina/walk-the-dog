@@ -33,7 +33,8 @@ features = ["console",
            "HtmlCanvasElement",
            "CanvasRenderingContext2d",
            "Element", 
-           "HtmlImageElement", ]
+           "HtmlImageElement",
+           "Response", ]
 
 # These crates are used for running unit tests.
 [dev-dependencies]
