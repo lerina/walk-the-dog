@@ -130,14 +130,43 @@ pub fn main_js() -> Result<(), JsValue> {
 
         image.set_src("../resources/pix/rhb.png");
         success_rx.await;
+
+        let sprite = sheet.frames.get("Run (1).png").expect("Cell not found");
+      context.draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+            &image,
+            sprite.frame.x.into(),
+            sprite.frame.y.into(),
+            sprite.frame.w.into(),
+            sprite.frame.h.into(),
+            300.0,
+            300.0,
+            sprite.frame.w.into(),
+            sprite.frame.h.into(),
+        );	
+
     }); //^-- wasm_bindgen_futures::spawn_local()
 
     Ok(())
 }
 
+// NOTE: JsFuture is not a JavaScript future but a Rust future 
+// backed by a JavaScript promise
+// 
+// window.fetch_with_str() corresponds to the window.fetch function in JavaScript
+// That function returns Promise , which we immediately convert to a future 
+// via the `from` call
+//
+// we cast the returned resp_value into Response 
+// because the fetch call resolves to JsValue .
+// we must convert from the dynamic typing of JavaScript 
+// to the static typing of Rust, and the dyn_into() function does that.
+// resp.json() also returns a promise, so we wrap it in JsFuture 
+// as well and block on it with an await call.
 async fn fetch_json(json_path: &str) -> Result<JsValue, JsValue> {
     let window = web_sys::window().unwrap();
-    let resp_value = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(json_path)).await?;
+
+    let resp_value = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(json_path)).await?; 
+
     let resp: web_sys::Response = resp_value.dyn_into()?;
     wasm_bindgen_futures::JsFuture::from(resp.json()?).await
 }
