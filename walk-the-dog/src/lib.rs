@@ -85,6 +85,9 @@ pub fn main_js() -> Result<(), JsValue> {
 
         image.set_src("../resources/pix/rhb.png");
         success_rx.await;
+        
+        // frame counter for the animation
+        let mut frame = -1;
 
         // set up a callback every 50 milliseconds 
         // with JavaScript's setInterval function, 
@@ -98,7 +101,10 @@ pub fn main_js() -> Result<(), JsValue> {
         // So:
         // 1. Get interval callback, clear screen, draw sprite
         let interval_callback = Closure::wrap(Box::new(move || {
-            let sprite = sheet.frames.get("Run (1).png").expect("Cell not found");
+            // cycle the frame count between 0 and 7
+            frame = (frame + 1) % 8;
+            let frame_name = format!("Run ({}).png", frame + 1);
+            let sprite = sheet.frames.get(&frame_name).expect("Cell not found");
             context.clear_rect(0.0, 0.0, 600.0, 600.0);
 
        context.draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
