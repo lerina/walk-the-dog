@@ -1,7 +1,27 @@
 use rand::prelude::*;
+use serde::Deserialize;
+use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::console;
+use web_sys::{console, Response};
+
+#[derive(Deserialize)]
+struct Sheet {
+    frames: HashMap<String, Cell>,
+}
+
+#[derive(Deserialize)]
+struct Rect {
+    x: u16,
+    y: u16,
+    w: u16,
+    h: u16,
+}
+
+#[derive(Deserialize)]
+struct Cell {
+    frame: Rect,
+}
 
 #[wasm_bindgen(start, catch)]
 pub fn main_js() -> Result<(), JsValue> {
@@ -41,6 +61,13 @@ pub fn main_js() -> Result<(), JsValue> {
 
         image.set_src("../resources/pix/rhb.png");
         context.draw_image_with_html_image_element(&image, 0.0, 0.0);
+        let json = fetch_json("../resources/pix/rhb.json")
+            .await
+            .expect("Could not fetch rhb.json");
+        let sheet: Sheet = json
+            .into_serde()
+            .expect("Could not convert rhb.json into a Sheet structure");
+
         /*
         sierpinski(
             &context,
@@ -54,6 +81,14 @@ pub fn main_js() -> Result<(), JsValue> {
     Ok(())
 }
 
+async fn fetch_json(json_path: &str) -> Result<JsValue, JsValue> {
+    let window = web_sys::window().unwrap();
+    let resp_value = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(json_path)).await?;
+    let resp: web_sys::Response = resp_value.dyn_into()?;
+    wasm_bindgen_futures::JsFuture::from(resp.json()?).await
+}
+
+//---------------------
 fn sierpinski(
     context: &web_sys::CanvasRenderingContext2d,
     points: [(f64, f64); 3],
