@@ -1,8 +1,3 @@
-/*
-use std::collections::HashMap;
-use std::rc::Rc;
-use std::sync::Mutex;
-*/
 use std::{collections::HashMap, rc::Rc, sync::Mutex};
 use rand::prelude::*;
 use serde::Deserialize;
@@ -84,24 +79,49 @@ pub fn main_js() -> Result<(), JsValue> {
             }
         });
         
+
         image.set_onload(Some(callback.as_ref().unchecked_ref()));
         image.set_onerror(Some(error_callback.as_ref().unchecked_ref()));
 
         image.set_src("../resources/pix/rhb.png");
         success_rx.await;
 
-        let sprite = sheet.frames.get("Run (1).png").expect("Cell not found");
-      context.draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
-            &image,
-            sprite.frame.x.into(),
-            sprite.frame.y.into(),
-            sprite.frame.w.into(),
-            sprite.frame.h.into(),
-            300.0,
-            300.0,
-            sprite.frame.w.into(),
-            sprite.frame.h.into(),
-        );	
+        // set up a callback every 50 milliseconds 
+        // with JavaScript's setInterval function, 
+        // which is called set_interval_with_callback . 
+        // First, we need to set up the callback itself
+        // This closure will be called multiple times 
+        // so we use Closure::wrap not Closure::once
+        // This also means we need to use Box with an explicit cast, 
+        // as Box<dyn FnMut()> , because the wrap function requires Box , 
+        // and there isn't enough information for the compiler to infer the type.
+        // So:
+        // 1. Get interval callback, clear screen, draw sprite
+        let interval_callback = Closure::wrap(Box::new(move || {
+            let sprite = sheet.frames.get("Run (1).png").expect("Cell not found");
+            context.clear_rect(0.0, 0.0, 600.0, 600.0);
+
+       context.draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+                &image,
+                sprite.frame.x.into(),
+                sprite.frame.y.into(),
+                sprite.frame.w.into(),
+                sprite.frame.h.into(),
+                300.0,
+                300.0,
+                sprite.frame.w.into(),
+                sprite.frame.h.into(),
+            );
+        }) as Box<dyn FnMut()>);
+
+        // 2. schedule it to be called every 50 milliseconds
+        window.set_interval_with_callback_and_timeout_and_arguments_0(
+            interval_callback.as_ref().unchecked_ref(), 
+            50,
+        );
+        // Now we need to forget the closure that we passed into setInterval 
+        // so that Rust doesn't destroy it when we leave the scope of this future.
+        interval_callback.forget();	
 
     }); //^-- wasm_bindgen_futures::spawn_local()
 
