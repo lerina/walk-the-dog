@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
-use web_sys::{CanvasRenderingContext2d, Document, HtmlCanvasElement, Window};
-
+use std::future::Future;
+use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen_futures::JsFuture;
+use web_sys::{CanvasRenderingContext2d, Document, HtmlCanvasElement, Response, Window};
 // It's a macro that allows you to log in to the console with log!
 // using a syntax such as the format! function.
 // Taken from https://rustwasm.github.io/book/game-of-life/debugging.html
@@ -26,4 +28,45 @@ pub fn canvas() -> Result<HtmlCanvasElement> {
         .ok_or_else(|| anyhow!("No Canvas Element found with ID 'canvas'"))?
         .dyn_into::<web_sys::HtmlCanvasElement>()
         .map_err(|element| anyhow!("Error converting {:#?} to HtmlCanvasElement", element))
+}
+
+pub fn context() -> Result<CanvasRenderingContext2d> {
+    canvas()?
+        .get_context("2d")
+        .map_err(|js_value| anyhow!("Error getting 2d context {:#?}", js_value))?
+        .ok_or_else(|| anyhow!("No 2d context found"))?
+        .dyn_into::<web_sys::CanvasRenderingContext2d>()
+        .map_err(|element| {
+            anyhow!(
+                "Error converting {:#?} to CanvasRenderingContext2d",
+                element
+            )
+        })
+}
+
+pub fn spawn_local<F>(future: F)
+where
+    F: Future<Output = ()> + 'static,
+{
+    wasm_bindgen_futures::spawn_local(future);
+}
+
+pub async fn fetch_with_str(resource: &str) -> Result<JsValue> {
+    JsFuture::from(window()?.fetch_with_str(resource))
+        .await
+        .map_err(|err| anyhow!("error fetching {:#?}", err))
+}
+
+pub async fn fetch_json(json_path: &str) -> Result<JsValue> {
+    let resp_value = fetch_with_str(json_path).await?;
+    let resp: Response = resp_value
+        .dyn_into()
+        .map_err(|element| anyhow!("Error converting {:#?} to Response", element))?;
+
+    JsFuture::from(
+        resp.json()
+            .map_err(|err| anyhow!("Could not get JSON from response {:#?}", err))?,
+    )
+    .await
+    .map_err(|err| anyhow!("error fetching JSON {:#?}", err))
 }

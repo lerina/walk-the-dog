@@ -42,19 +42,21 @@ pub fn main_js() -> Result<(), JsValue> {
         .unwrap()
         .dyn_into::<web_sys::HtmlCanvasElement>()
         .unwrap();
-
-    let context = canvas
-        .get_context("2d")
-        .unwrap()
-        .unwrap()
-        .dyn_into::<web_sys::CanvasRenderingContext2d>()
-        .unwrap();
-
+    /*
+      let context = canvas
+          .get_context("2d")
+          .unwrap()
+          .unwrap()
+          .dyn_into::<web_sys::CanvasRenderingContext2d>()
+          .unwrap();
+    */
+    let context = browser::context().expect("Could not get browser context");
     // spawn_local : Runs a Rust Future on the current thread
     // https://github.com/rustwasm/wasm-bindgen/issues/1126
-    wasm_bindgen_futures::spawn_local(async move {
+    //wasm_bindgen_futures::spawn_local(async move {
+    browser::spawn_local(async move {
         //
-        let json = fetch_json("../resources/pix/rhb.json")
+        let json = browser::fetch_json("../resources/pix/rhb.json")
             .await
             .expect("Could not fetch rhb.json");
         let sheet: Sheet = json
@@ -156,7 +158,8 @@ pub fn main_js() -> Result<(), JsValue> {
 // resp.json() also returns a promise, so we wrap it in JsFuture
 // as well and block on it with an await call.
 async fn fetch_json(json_path: &str) -> Result<JsValue, JsValue> {
-    let window = web_sys::window().unwrap();
+    //let window = web_sys::window().unwrap();
+    let window = browser::window().unwrap();
 
     let resp_value = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(json_path)).await?;
 

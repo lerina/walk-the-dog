@@ -37,6 +37,41 @@ with strings
 • An `anyhow::Result<T>` type that is a shortcut for `Result<T,anyhow::Error>`
 
 
+---
+
+Almost every function that calls into JavaScript will return a JsValue type, because JavaScript is a dynamically typed language. 
+We know that the element returned by `get_element_by_id` will return `HtmlCanvasElement` , at least if we've retrieved the right JavaScript node, 
+so we can convert it from `JsValue` to the correct element. 
+This is what `dyn_into` does – it converts from `JsValue` to appropriate Rust types. 
+In order to use `dyn_into` , 
+you must bring into scope (import) `wasm_bindgen::JsCast`
+
+```rust
+pub fn context() -> Result<CanvasRenderingContext2d> {
+    canvas()?
+        .get_context("2d")
+        .map_err(|js_value| anyhow!("Error getting 2d context {:#?}", js_value))?
+        .ok_or_else(|| anyhow!("No 2d context found"))?
+        .dyn_into::<web_sys::CanvasRenderingContext2d>()
+        .map_err(|element| {
+            anyhow!( "Error converting {:#?} to CanvasRenderingContext2d", element)
+        })
+}
+```
+
+We can add a function for spawn_local
+
+Tip
+If you are writing a wrapper like this and aren't sure what the signature should
+be, start by looking at the function you're wrapping and mimic its signature.
+
+```rust
+pub fn spawn_local<F>(future: F) 
+    where F: Future<Output = ()> + 'static, {
+        wasm_bindgen_futures::spawn_local(future);
+}
+```
+
 
 
 
