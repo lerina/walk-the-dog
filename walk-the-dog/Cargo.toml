@@ -19,6 +19,7 @@ getrandom = { version = "0.2.10", features = ["js"] }
 futures = "0.3.28"
 wasm-bindgen-futures = "0.4.37"
 serde = {version = "1.0.188", features = ["derive"] }
+anyhow = "1.0.75"
 
 
 
