@@ -1,8 +1,12 @@
 use anyhow::{anyhow, Result};
 use std::future::Future;
+use wasm_bindgen::closure::{Closure, WasmClosureFnOnce};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{CanvasRenderingContext2d, Document, HtmlCanvasElement, Response, Window};
+use web_sys::{
+    CanvasRenderingContext2d, Document, HtmlCanvasElement, HtmlImageElement, Response, Window,
+};
+
 // It's a macro that allows you to log in to the console with log!
 // using a syntax such as the format! function.
 // Taken from https://rustwasm.github.io/book/game-of-life/debugging.html
@@ -69,4 +73,24 @@ pub async fn fetch_json(json_path: &str) -> Result<JsValue> {
     )
     .await
     .map_err(|err| anyhow!("error fetching JSON {:#?}", err))
+}
+
+/*
+This function is just a wrapper around HtmlImageElement ; there's not much to
+explain. In the future, we may decide we want our own type for images, but for now,
+we'll stick with the browser-provided type.
+*/
+pub fn new_image() -> Result<HtmlImageElement> {
+    HtmlImageElement::new().map_err(|err| anyhow!("Could not create HtmlImageElement: {:#?}", err))
+}
+
+/*
+We just mimic the exact same type signature of the
+Closure::once function from wasm_bindgen .
+*/
+pub fn closure_once<F, A, R>(fn_once: F) -> Closure<F::FnMut>
+where
+    F: 'static + WasmClosureFnOnce<A, R>,
+{
+    Closure::once(fn_once)
 }
