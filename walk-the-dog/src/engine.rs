@@ -10,6 +10,53 @@ use std::sync::Mutex;
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 use web_sys::{HtmlImageElement, CanvasRenderingContext2d};
 
+
+use async_trait::async_trait;
+
+pub struct Rect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+
+pub struct Renderer {
+    context: CanvasRenderingContext2d,
+}
+
+impl Renderer {
+    pub fn clear(&self, rect: &Rect) {
+        self.context.clear_rect(
+            rect.x.into(),
+            rect.y.into(),
+            rect.width.into(),
+            rect.height.into(),
+        );
+    }
+
+    pub fn draw_image(&self, 
+                        image: &HtmlImageElement, 
+                        frame: &Rect, 
+                        destination: &Rect) {
+        self.context
+         .draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+            &image,
+            frame.x.into(),
+            frame.y.into(),
+            frame.width.into(),
+            frame.height.into(),
+            destination.x.into(),
+            destination.y.into(),
+            destination.width.into(),
+            destination.height.into(),
+        )
+        .expect("Drawing is throwing exceptions! Unrecoverable error.");
+    }//-- draw_image
+    
+
+}//^-- impl Renderer
+
 /*
 We are still dependent on wasm_bindgen for the Closure and JSValue types, as well
 as the unchecked_ref function, but we've reduced the amount of direct platform
@@ -58,10 +105,24 @@ pub async fn load_image(source: &str) -> Result<HtmlImageElement> {
     Ok(image)
 }
 
+
+/*
+    = note: `async` trait functions are not currently supported
+    = note: consider using the `async-trait` crate: https://crates.io/crates/async-trait
+    = note: see issue #91611 <https://github.com/rust-lang/rust/issues/91611> for more information
+
+*/
+#[async_trait(?Send)]
 pub trait Game {
+    async fn initialize(&self) -> Result<Box<dyn Game>>;
     fn update(&mut self);
-    fn draw(&self, context: &CanvasRenderingContext2d);
+    fn draw(&self, context: &Renderer);
 }
+
+//pub trait Game {
+//    fn update(&mut self);
+//    fn draw(&self, context: &CanvasRenderingContext2d);
+//}
 
 const FRAME_SIZE: f32 = 1.0 / 60.0 * 1000.0;
 
@@ -74,9 +135,14 @@ type SharedLoopClosure = Rc<RefCell<Option<LoopClosure>>>;
 
 impl GameLoop {
     pub async fn start(mut game: impl Game + 'static) -> Result<()> {
+        let mut game = game.initialize().await?;
         let mut game_loop = GameLoop {
             last_frame: browser::now()?,
             accumulated_delta: 0.0,
+        };
+
+        let renderer = Renderer {
+            context: browser::context()?,
         };
 
         let f: SharedLoopClosure = Rc::new(RefCell::new(None));
@@ -91,8 +157,9 @@ impl GameLoop {
                 game_loop.accumulated_delta -= FRAME_SIZE;
             }
             game_loop.last_frame = perf;
-            game.draw(&browser::context().expect("Context should exist",));
-            
+            //game.draw(&browser::context().expect("Context should exist",));
+            game.draw(&renderer);
+
             browser::request_animation_frame(f.borrow().as_ref().unwrap());
         }));
 

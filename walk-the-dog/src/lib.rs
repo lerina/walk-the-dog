@@ -1,6 +1,7 @@
 #[macro_use]
 mod browser; // This makes log! available whenever the browser module is used
 mod engine;
+mod game;
 
 use rand::prelude::*;
 use serde::Deserialize;
