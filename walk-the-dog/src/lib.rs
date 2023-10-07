@@ -1,15 +1,42 @@
 #[macro_use]
+mod browser;
+mod engine;
+mod game;
+
+use engine::GameLoop;
+use game::WalkTheDog;
+use wasm_bindgen::prelude::*;
+
+// This is like the `main` function, except for JavaScript.
+#[wasm_bindgen(start)]
+pub fn main_js() -> Result<(), JsValue> {
+    console_error_panic_hook::set_once();
+
+    browser::spawn_local(async move {
+        let game = WalkTheDog::new();
+
+        GameLoop::start(game)
+            .await
+            .expect("Could not start game loop");
+    });
+
+    Ok(())
+}
+
+/*
+#[macro_use]
 mod browser; // This makes log! available whenever the browser module is used
 mod engine;
 mod game;
 
 use rand::prelude::*;
-use serde::Deserialize;
-use std::{collections::HashMap, rc::Rc, sync::Mutex};
+
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::console;
+use crate::game::Sheet;
 
+/*
 #[derive(Deserialize)]
 struct Sheet {
     frames: HashMap<String, Cell>,
@@ -27,7 +54,7 @@ struct Rect {
 struct Cell {
     frame: Rect,
 }
-
+*/
 #[wasm_bindgen(start, catch)]
 pub fn main_js() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
@@ -107,6 +134,7 @@ pub fn main_js() -> Result<(), JsValue> {
         // as Box<dyn FnMut()> , because the wrap function requires Box ,
         // and there isn't enough information for the compiler to infer the type.
         // So:
+/* now in game.rs
         // 1. Get interval callback, clear screen, draw sprite
         let interval_callback = Closure::wrap(Box::new(move || {
             // cycle the frame count between 0 and 7
@@ -127,6 +155,7 @@ pub fn main_js() -> Result<(), JsValue> {
                 sprite.frame.h.into(),
             );
         }) as Box<dyn FnMut()>);
+*/
 
         // 2. schedule it to be called every 50 milliseconds
         /*
@@ -172,3 +201,4 @@ async fn fetch_json(json_path: &str) -> Result<JsValue, JsValue> {
     let resp: web_sys::Response = resp_value.dyn_into()?;
     wasm_bindgen_futures::JsFuture::from(resp.json()?).await
 }
+*/

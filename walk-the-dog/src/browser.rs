@@ -4,8 +4,8 @@ use wasm_bindgen::closure::{Closure, WasmClosureFnOnce, WasmClosure};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    CanvasRenderingContext2d, Document, HtmlCanvasElement, HtmlImageElement, Response, Window,
-};
+    CanvasRenderingContext2d, Document, HtmlCanvasElement, HtmlImageElement, Response, Window,};
+
 
 // It's a macro that allows you to log in to the console with log!
 // using a syntax such as the format! function.

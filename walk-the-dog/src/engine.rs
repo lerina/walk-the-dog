@@ -1,17 +1,20 @@
-//use crate::browser;
-use crate::browser::{self, LoopClosure};//self is to have browser too.
+use crate::browser::{self, LoopClosure};
 use anyhow::{anyhow, Result};
-use futures::channel::oneshot::channel;
-//use std::borrow::Borrow;
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::sync::Mutex;
-//use wasm_bindgen::closure::Closure;
-use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
-use web_sys::{HtmlImageElement, CanvasRenderingContext2d};
-
-
 use async_trait::async_trait;
+use futures::channel::{
+    mpsc::{unbounded, UnboundedReceiver},
+    oneshot::channel,};
+use serde::Deserialize;
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Mutex};
+use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
+use web_sys::{CanvasRenderingContext2d, HtmlImageElement};
+
+
+#[derive(Clone, Copy)]
+pub struct Point {
+    pub x: i16,
+    pub y: i16,
+}
 
 pub struct Rect {
     pub x: f32,
@@ -20,6 +23,23 @@ pub struct Rect {
     pub height: f32,
 }
 
+#[derive(Deserialize)]
+pub struct Cell {
+    pub frame: SheetRect,
+}
+#[derive(Deserialize)]
+struct SheetRect {
+    x: i16,
+    y: i16,
+    w: i16,
+    h: i16,
+}
+
+
+#[derive(Deserialize)]
+pub struct Sheet {
+    frames: HashMap<String, Cell>,
+}
 
 pub struct Renderer {
     context: CanvasRenderingContext2d,
