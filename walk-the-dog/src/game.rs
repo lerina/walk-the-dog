@@ -18,7 +18,6 @@ impl WalkTheDog {
             image: None,
             sheet: None,
             frame: 0,
-            //position: Point { x: 0, y: 0 },
         }
     }
 }
@@ -26,10 +25,9 @@ impl WalkTheDog {
 #[async_trait(?Send)]
 impl Game for WalkTheDog {
     async fn initialize(&self) -> Result<Box<dyn Game>> {
-        //Ok(Box::new(WalkTheDog {}))
         let sheet: Sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
         let image = Some(engine::load_image("../resources/pix/rhb.png").await?);
-
+        let sheet = Some(sheet);
         Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame, }))
     }
 
@@ -44,12 +42,11 @@ impl Game for WalkTheDog {
     fn draw(&self, renderer: &Renderer) {
         let current_sprite = (self.frame / 3) + 1;
         let frame_name = format!("Run ({}).png", current_sprite);
-        //let sprite = self.sheet.frames.get(&frame_name).expect("Cell not found");
         let sprite = self.sheet.as_ref()
                                .and_then(|sheet| sheet.frames.get(&frame_name))
                                .expect("Cell not found");
 
-        renderer.clear(Rect {
+        renderer.clear( &Rect {
                         x: 0.0,
                         y: 0.0,
                         width: 600.0,
@@ -57,13 +54,13 @@ impl Game for WalkTheDog {
         });
 
         self.image.as_ref().map(|image| {
-            renderer.draw_image(&self.image,
-                Rect {  x: sprite.frame.x.into(),
+            renderer.draw_image(&self.image.as_ref().unwrap(),
+                &Rect {  x: sprite.frame.x.into(),
                         y: sprite.frame.y.into(),
                         width: sprite.frame.w.into(),
                         height: sprite.frame.h.into(),
                 },
-                Rect {  x: 300.0,
+                &Rect {  x: 300.0,
                         y: 300.0,
                         width: sprite.frame.w.into(),
                         height: sprite.frame.h.into(),

@@ -255,7 +255,7 @@ This only contains slight changes to the code in lib.rs , although it definitely
 Calls to context are replaced with calls to renderer, and we've used the new Rect structure.
 
 
-We'll need to add that to the game module.
+We'll need to add that to the game module. <SHOULD BE engine.rs>
 
 ```rust
 // filename: src/game.rs
@@ -500,6 +500,53 @@ pub fn main_js() -> Result<(), JsValue> {
     Ok(())
 }
 ```
+
+### Possible error in the book
+
+ sheet in WalkTheDog is now Option<Sheet>
+
+```rust
+// filename: src/game.rs
+
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    async fn initialize(&self) -> Result<Box<dyn Game>> {
+        let sheet: Sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
+        let image = Some(engine::load_image("../resources/pix/rhb.png").await?);
+
+        let sheet = Some(sheet); // <--- WalkTheDog now take an Option
+        Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame, }))
+    }
+```
+
+Since draw_image expects a plain &HtmlImageElement 
+```rust
+// filename src/engine.rs
+
+    pub fn draw_image(&self, 
+                        image: &HtmlImageElement, <---- 
+                        frame: &Rect, 
+                        destination: &Rect) {
+    ...
+```
+we must unwrap it to pass it along but we cant move  it 
+so we use `as_ref()` to borrow it and then unwrap.
+
+```rust
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    ...
+    fn draw(&self, renderer: &Renderer) {
+        ...
+
+        self.image.as_ref().map(|image| {
+            renderer.draw_image(&self.image.as_ref().unwrap(),
+    ...
+
+```
+
+### Adding keyboard input
+
 
 
 

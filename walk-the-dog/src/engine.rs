@@ -28,17 +28,17 @@ pub struct Cell {
     pub frame: SheetRect,
 }
 #[derive(Deserialize)]
-struct SheetRect {
-    x: i16,
-    y: i16,
-    w: i16,
-    h: i16,
+pub struct SheetRect {
+    pub x: i16,
+    pub y: i16,
+    pub w: i16,
+    pub h: i16,
 }
 
 
 #[derive(Deserialize)]
 pub struct Sheet {
-    frames: HashMap<String, Cell>,
+    pub frames: HashMap<String, Cell>,
 }
 
 pub struct Renderer {
@@ -77,28 +77,6 @@ impl Renderer {
 
 }//^-- impl Renderer
 
-/*
-We are still dependent on wasm_bindgen for the Closure and JSValue types, as well
-as the unchecked_ref function, but we've reduced the amount of direct platform
-dependencies. Our only JS dependency is on HtmlImageElement .
-Now, take a look at the very beginning of the function and you'll see
-the new_image call can use the ? operator to early return in the event of an error,
-with a standard Rust error type.
-
-This is why we mapped those errors in the browser functions.
-
-Moving past the first two lines of the method, the rest of the function
-is largely the same as before, replacing any direct calls to wasm-bindgen functions
-with their corresponding calls in browser .
-
-We've changed the channel to send anyhow::Result and used anyhow! in error_callback .
-This then allows us to end the function with a call to complete_rx.await??
-and Ok(image) . Those two ?? are not a misprint;
-complete_rx.await returns Result<Result<(), anyhow::Error>,
-Canceled> .
-Since anyhow::Error and Canceled both conform to std::error::Error ,
-we can handle those errors with ? each time.
-*/
 pub async fn load_image(source: &str) -> Result<HtmlImageElement> {
     let image = browser::new_image()?;
     let (complete_tx, complete_rx) = channel::<Result<()>>();
@@ -138,11 +116,6 @@ pub trait Game {
     fn update(&mut self);
     fn draw(&self, context: &Renderer);
 }
-
-//pub trait Game {
-//    fn update(&mut self);
-//    fn draw(&self, context: &CanvasRenderingContext2d);
-//}
 
 const FRAME_SIZE: f32 = 1.0 / 60.0 * 1000.0;
 
