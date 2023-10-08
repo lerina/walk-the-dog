@@ -10,6 +10,7 @@ pub struct WalkTheDog {
     image: Option<HtmlImageElement>,
     sheet: Option<Sheet>,
     frame: u8,
+    position: Point,
 }
 
 impl WalkTheDog {
@@ -18,6 +19,7 @@ impl WalkTheDog {
             image: None,
             sheet: None,
             frame: 0,
+            position: Point {x: 0, y: 0},
         }
     }
 }
@@ -28,15 +30,21 @@ impl Game for WalkTheDog {
         let sheet: Sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
         let image = Some(engine::load_image("../resources/pix/rhb.png").await?);
         let sheet = Some(sheet);
-        Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame, }))
+
+        Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame, position: self.position, }))
     }
 
     fn update(&mut self, keystate: &KeyState) {
-        if self.frame < 23 {
-            self.frame += 1;
-        } else {
-            self.frame = 0;
-        }
+        let mut velocity = Point { x: 0, y: 0 };
+        
+        if keystate.is_pressed("ArrowDown") { velocity.y += 3; }
+        if keystate.is_pressed("ArrowUp") { velocity.y -= 3; }
+        if keystate.is_pressed("ArrowRight") { velocity.x += 3; }
+        if keystate.is_pressed("ArrowLeft") { velocity.x -= 3; }
+        if keystate.is_pressed("ArrowLeft") { velocity.x -= 3; }
+        
+        self.position.x += velocity.x;
+        self.position.y += velocity.y;
     }
 
     fn draw(&self, renderer: &Renderer) {
@@ -60,8 +68,8 @@ impl Game for WalkTheDog {
                         width: sprite.frame.w.into(),
                         height: sprite.frame.h.into(),
                 },
-                &Rect {  x: 300.0,
-                        y: 300.0,
+                &Rect { x: self.position.x.into(),
+                        y: self.position.y.into(),
                         width: sprite.frame.w.into(),
                         height: sprite.frame.h.into(),
                 },

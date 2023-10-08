@@ -893,3 +893,184 @@ impl Game for WalkTheDog {
         ...
 ```
 
+> We've got a GameLoop that processes keyboard input  and passes that state to our Game .
+
+
+### Moving Red Hat Boy
+
+We'll create a Point structure in engine that will hold an x and a y position for RHB. 
+On every update call, we'll also calculate a velocity for him, based on which keys are pressed. 
+Every direction will be the same size, so if ArrowLeft and ArrowRight are pressed at the same time, he'll stop moving. 
+
+After we calculate his velocity, we'll update his position with that number. 
+That should be enough to allow us to move him around the screen. 
+Let's start by adding position to the WalkTheDog game struct:
+
+```rust
+// filename:game.rs
+use crate::engine::{ ...,
+                     KeyState,
+                     Point
+                    };
+
+pub struct WalkTheDog {
+    image: Option<HtmlImageElement>,
+    sheet: Option<Sheet>,
+    frame: u8,
+    position: Point,
+}
+```
+
+We put Point in engine:
+
+```rust
+// filename: src/engine.rs
+
+#[derive(Clone, Copy)]
+pub struct Point {
+    pub x: i16,
+    pub y: i16,
+}
+
+```
+Note that we're using integers here so that we don't have to deal with floating point
+math when it's not necessary. While the canvas functions all take f64 values, that's
+only because there is only one number type in JavaScript , and canvas is faster 
+if you use integer coordinates. 
+
+You'll also need to update the `WalkTheDog::new` function in `game.rs` to fill in a default position. 
+Let's use 0, 0 for now:
+
+```rust
+// filetype: src/game.rs
+
+impl WalkTheDog {
+    pub fn new() -> Self {
+        WalkTheDog {
+            image: None,
+            sheet: None,
+            frame: 0,
+            position: Point {x: 0, y: 0},
+        }
+    }
+}
+```
+
+The initialize function also needs to be updated to account for position. 
+This is actually why we marked Point with Clone and Copy. 
+It makes it possible to copy it into the new WalkTheDog initialize function:
+
+```rust
+// filename: src/game.rs
+...
+/* Before
+        Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame,}))
+*/
+
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    async fn initialize(&self) -> Result<Box<dyn Game>> {
+        let sheet: Sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
+        let image = Some(engine::load_image("../resources/pix/rhb.png").await?);
+        let sheet = Some(sheet);
+
+        Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame, position: self.position, }))
+    }
+...
+```
+
+
+In order for position to have any meaning, we'll need to update the draw function so
+that it's actually being used with:
+```
+x: self.position.x.into(),
+y: self.position.y.into(),
+```
+
+```rust
+// filename: src/game.rs
+
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    ...
+    fn draw(&self, renderer: &Renderer) {
+    ...
+        self.image.as_ref().map(|image| {
+            renderer.draw_image(&self.image.as_ref().unwrap(),
+                &Rect {  x: sprite.frame.x.into(),
+                ...
+                },
+                &Rect { x: self.position.x.into(), //x: 300.0,
+                        y: self.position.y.into(), //y: 300.0,
+                        width: sprite.frame.w.into(),
+                        height: sprite.frame.h.into(),
+                },
+```
+
+
+NOTE: The first Rect is the slice we are taking out of our sprite sheet. 
+The second one is where we want to draw it. 
+This should cause a noticeable change to the game, as RHB is now in the upper-left corner.
+
+Finally, we're going to modify update to calculate a velocity based 
+on which keys are pressed in KeyState. 
+
+We'll add this before updating the current frame, as shown here:
+
+```rust
+// filename: src/game.rs
+
+/*Before
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    ...
+
+    fn update(&mut self, keystate: &KeyState) {
+        if self.frame < 23 {
+            self.frame += 1;
+        } else {
+            self.frame = 0;
+        }
+    }
+
+*/
+    fn update(&mut self, keystate: &KeyState) {
+        let mut velocity = Point { x: 0, y: 0 };
+        
+        if keystate.is_pressed("ArrowDown") { velocity.y += 3; }
+        if keystate.is_pressed("ArrowUp") { velocity.y -= 3; }
+        if keystate.is_pressed("ArrowRight") { velocity.x += 3; }
+        if keystate.is_pressed("ArrowLeft") { velocity.x -= 3; }
+        if keystate.is_pressed("ArrowLeft") { velocity.x -= 3; }
+        
+        // Next, we adjust the position based on velocity
+        self.position.x += velocity.x;
+        self.position.y += velocity.y;
+    }
+```
+
+The " ArrowDown " and " ArrowUp " strings and so on are all listed at
+[Code values for keyboard events](https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_code_values)
+You can see here that if " ArrowDown " is pressed we increase y , and if
+" ArrowUp " is pressed, we decrease it, and that's because the origin is in the upper-left-
+hand corner, with y increasing as you go down, not up. Note also that we don't use if/
+else here. We want to account for every pressed key and not short-circuit on the first key
+that's pressed. Next, we adjust the position based on velocity:
+
+```rust
+// filename: src/game.rs
+        ...
+        if keystate.is_pressed("ArrowLeft") { velocity.x -= 3; }
+        
+        self.position.x += velocity.x;
+        self.position.y += velocity.y;
+    }
+```
+
+
+Head back to the webbrowser, and you can now use the arrow keys to move RHB around! If
+he doesn't move, make sure you click in the canvas to give it focus. If he still doesn't move
+and you're sure you've gotten everything right, put some log! messages in the start
+function and make sure KeyState is being created, or in the update function to see if
+you're actually getting a new KeyState .
+
