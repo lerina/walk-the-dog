@@ -1,5 +1,5 @@
 use std::{collections::HashMap, rc::Rc, sync::Mutex};
-use crate::{ browser, engine::{self, Game, Point, Rect, Renderer, Sheet},};
+use crate::{ browser, engine::{self, Game, Point, Rect, Renderer, Sheet, KeyState},};
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -31,7 +31,7 @@ impl Game for WalkTheDog {
         Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame, }))
     }
 
-    fn update(&mut self) {
+    fn update(&mut self, keystate: &KeyState) {
         if self.frame < 23 {
             self.frame += 1;
         } else {

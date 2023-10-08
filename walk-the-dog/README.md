@@ -547,19 +547,349 @@ impl Game for WalkTheDog {
 
 ### Adding keyboard input
 
+We'll start listening to keyboard events and use them to control our RHB.
+That means adding keyboard input to the game loop and passing that into the update function.
+
+In a normal program, you would listen for keys to get pressed – in other words, 
+pushed down and then released – and then do something such as update the screen 
+when the button is released. 
+
+This doesn't fit in with a game because typical players want the action to happen 
+as soon as a key is pushed down and want it to continue for as long as it's held. 
+
+Think of moving around the screen with the arrow keys. 
+You expect motion to start the second you hit the arrow key, not after you release it. 
+In addition, traditional programming doesn't account for things like pressing "up" 
+and "right" at the same time. 
+If we process those as two separate actions, we'll move right, then up, then right, 
+and then up, like we're moving up the stairs. 
+
+What we'll do is listen to every keyup and keydown event, 
+and bundle that all up into a keystate that stores every currently pressed key. 
+Then we'll pass that state to the update function so that the game can figure out 
+just what to do with all the currently pressed keys.
+
+
+To get keyboard events, we have to listen for the keydown and keyup events on canvas .
+Let's start with a new function in `engine.rs` , `prepare_input()` :
+
+```rust
+fn prepare_input() {
+    let onkeydown = browser::closure_wrap( 
+                        Box::new(move |keycode: web_sys::KeyboardEvent| {})
+                        as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+    
+    let onkeyup = browser::closure_wrap(Box::new( 
+                        move |keycode: web_sys::KeyboardEvent| {})
+                        as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+
+    browser::canvas().unwrap()
+                     .set_onkeydown(Some(onkeydown.as_ref().unchecked_ref()));
+
+    browser::canvas().unwrap()
+                     .set_onkeyup(Some(onkeyup.as_ref().unchecked_ref()));
+
+
+    onkeydown.forget();
+    onkeyup.forget();
+}
+
+```
+
+We're setting up Closure objects in the same way we did for `load_image` 
+and `request_animation_frame`.
+We have to make sure we call forget on both of the Closure instances so that they
+aren't deallocated immediately after being set up because nothing in the Rust application
+is holding onto them. 
+You'll also need in `Cargo.toml` to add the `KeyboardEvent` feature to `web-sys` to include it.
+
+Tip::
+
+        Unlike most things in Rust, if you don't add a forget call, you won't get a
+        compile-time error. You'll get a panic almost immediately and not always with
+        a helpful error message. If you think you've set up callbacks into JavaScript
+        and you're getting panics, ask yourself whether anything is holding on to
+        that callback in your program. If nothing is, you've probably forgotten to add
+        forget .
+
+
+We're listening to the input, so now we need to keep track of all of it. 
+
+It's tempting to start trying to condense the events into keystate in this function, 
+but that's troublesome because this function only handles one keyup or keydown at a time 
+and doesn't know anything about all the other keys. 
+
+If you wanted to keep track of an ArrowUp and ArrowRight being pressed at the same time, 
+you couldn't do it here. 
+
+What we will do is set up the listeners once before the game loop starts, 
+such as with initialize , and then process all the new key events on every update 
+updating our keystate . 
+
+This will mean sharing state from these closures with the closure 
+we passed to `request_animation_frame`. 
+
+It's time to add a channel.
+
+
+We'll create an unbounded channel, which is a channel that will grow forever if you let it, 
+here in prepare_input and then return its receiver. 
+We'll pass transmitters to both onkeyup and onkeydown , and send the KeyboardEvent 
+to each of those.
 
 
 
 
+```rust
+fn prepare_input() -> Result<UnboundedReceiver<KeyPress>> {
+    let (keydown_sender, keyevent_receiver) = unbounded();
+    let keydown_sender = Rc::new(RefCell::new(keydown_sender));
+    let keyup_sender = Rc::clone(&keydown_sender);
+
+    /* //Before
+    let onkeydown = browser::closure_wrap( 
+                        Box::new(move |keycode: web_sys::KeyboardEvent| {})
+                        as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+     ...
+    */
+    let onkeydown = browser::closure_wrap(
+                        Box::new(move |keycode: web_sys::KeyboardEvent| {
+                            keydown_sender.borrow_mut()
+                                          .start_send(KeyPress::KeyDown(keycode));
+                        }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+
+    let onkeyup = browser::closure_wrap(
+                        Box::new(move |keycode: web_sys::KeyboardEvent| {
+                            keyup_sender.borrow_mut()
+                                        .start_send(KeyPress::KeyUp(keycode));
+                        }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
+
+    /* //Before
+    browser::canvas().unwrap()
+                     .set_onkeydown(Some(onkeydown.as_ref().unchecked_ref()));
+
+    browser::canvas().unwrap()
+                     .set_onkeyup(Some(onkeyup.as_ref().unchecked_ref()));
 
 
+    onkeydown.forget();
+    onkeyup.forget();
+    */
+    browser::window()?.set_onkeydown(Some(onkeydown.as_ref().unchecked_ref()));
+    browser::window()?.set_onkeyup(Some(onkeyup.as_ref().unchecked_ref()));
+
+    onkeydown.forget();
+    onkeyup.forget();
+}
+```
+
+The function now returns `Result<UnboundedReceiver<KeyPress>>`.
+`UnboundedReceiver` and `unbounded` are both in the `futures::channel::mspc`
+module and are declared in a use declaration at the top of the file. 
+
+```rust
+use futures::channel::mspc::{unbounded, UnboundedReceiver};
+```
+
+We create the unbounded channel on the first line with the unbounded function 
+and then create reference counted versions of both `keydown_sender` and `keyup_sender`, 
+so that we can move each of them into their respective closures 
+while sending both events to the same receiver. 
+Note that the unbounded channel uses `start_send` instead of `send`.
+Finally, we return `keyevent_receiver` as `Result`.
+
+KeyPress
+
+It turns out you can't tell what kind of `KeyboardEvent` happened simply 
+by inspecting it. In order to keep track of whether the event was keyup or keydown, 
+we wrap those events in an enumerated type that we'll define in `engine.rs`:
+
+```rust
+enum KeyPress {
+    KeyUp(web_sys::KeyboardEvent),
+    KeyDown(web_sys::KeyboardEvent),
+}
+```
+
+This enum approach means we won't have to manage two channels. 
+Now that we have a function that will listen for and put all our key events into a channel, 
+we need to write a second function that grabs all those events off the channel 
+and reduces them into KeyState . 
+We can do that like so, still in the `engine` module:
+
+```rust
+fn process_input(state: &mut KeyState, keyevent_receiver: &mut UnboundedReceiver<KeyPress>) {
+    loop {
+        match keyevent_receiver.try_next() {
+            Ok(None) => break,
+            Err(_err) => break,
+            Ok(Some(evt)) => match evt {
+                KeyPress::KeyUp(evt) => state.set_released(&evt.code()),
+                KeyPress::KeyDown(evt) => state.set_pressed(&evt.code(), evt), 
+            },//^-- match evt                   
+        };//^-- match 
+    }//^-- loop
+}//^-- fn process_input
+```
+
+This function `process_input` takes `KeyState` and `Receiver` 
+and updates state by taking every entry off of the receiver until its empty. 
+
+Theoretically, this appears to create the possibility for an infinite loop in the event 
+that the receiver is constantly filled, but I was unable to do that by normal means (pressing the keyboard like a madman), and if somebody decides to write a script that fills this channel 
+and break their own game, more power to them.
+
+`KeyState` has to be passed as `mut` so that we update the current one 
+and do not start from a brand-new state on each update. 
+
+We've written this function pretending that `KeyState` already exists, 
+but we need to create it as well, again in the `engine`
+
+```rust
+// filename: src/engine.rs
+
+pub struct KeyState {
+    pressed_keys: HashMap<String, web_sys::KeyboardEvent>,
+}
+
+impl KeyState {
+    fn new() -> Self {
+        KeyState {
+            pressed_keys: HashMap::new(),
+        }
+    }
+
+    pub fn is_pressed(&self, code: &str) -> bool {
+        self.pressed_keys.contains_key(code)
+    }
+
+    fn set_pressed(&mut self, code: &str, event: web_sys::KeyboardEvent) {
+        self.pressed_keys.insert(code.into(), event);
+    }
+
+    fn set_released(&mut self, code: &str) {
+        self.pressed_keys.remove(code.into());
+    }
+
+}//^-- impl KeyState
+```
+
+The `KeyState` struct is just a wrapper around `HashMap` , storing a lookup of
+`KeyboardEvent.code` to its `KeyboardEvent` . 
+If the code isn't present, then the key isn't pressed. 
+The code is the actual representation of a physical key on the keyboard.
 
 
+We've created the libraries and structures we need for keyboard input, 
+so now we can integrate it into our GameLoop . 
 
+We'll call prepare_input in the start function before we start looping:
 
+```rust
+// filename: src/engine.rs
 
+/* //Before
+impl GameLoop {
+    pub async fn start(mut game: impl Game + 'static) -> Result<()> {
+        let mut game = game.initialize().await?;
+    ...
+*/
+impl GameLoop {
+    pub async fn start(mut game: impl Game + 'static) -> Result<()> {
+        let mut keyevent_receiver = prepare_input()?;
+        let mut game = game.initialize().await?;
+    ...
+```
 
+Then, we'll move `keyevent_receiver` into the `request_animation_frame`
+closure and process the input on every update
 
+```rust
+// filename: src/engine.rs
 
+/* //Before
+impl GameLoop {
+    pub async fn start(mut game: impl Game + 'static) -> Result<()> {
+    ...
+    *g.borrow_mut() = Some(browser::create_raf_closure(move |perf: f64| {
 
+            game_loop.accumulated_delta += (perf - game_loop.last_frame) as f32;
+            while game_loop.accumulated_delta > FRAME_SIZE {
+                ...
+        
+*/
+
+    let mut keystate = KeyState::new();
+
+    *g.borrow_mut() = Some(browser::create_raf_closure(move |perf: f64| {
+        process_input(&mut keystate, &mut keyevent_receiver);
+
+        game_loop.accumulated_delta += (perf - game_loop.last_frame) as f32;
+        while game_loop.accumulated_delta > FRAME_SIZE {
+```
+
+You can see that we initialized an empty `KeyState` right before 
+the `request_animation_frame` closure, so that we can start with an empty one. 
+
+Each frame will now call our `process_input` function and <u>generate a new KeyState</u> . 
+That's all the changes we have to do to our game loop to keep track of KeyState . 
+
+The only thing that's remaining is to pass it to our `Game` object so that it can be used. 
+Some game implementations will store this as a global, 
+but we'll just pass it to the `Game` trait. 
+
+We'll update the trait's update function to accept KeyState :
+
+```rust
+// filename: src/engine.rs
+
+/* Before
+#[async_trait(?Send)]
+pub trait Game {
+    async fn initialize(&self) -> Result<Box<dyn Game>>;
+    fn update(&mut self);
+    fn draw(&self, context: &Renderer);
+}
+*/
+
+#[async_trait(?Send)]
+pub trait Game {
+    async fn initialize(&self) -> Result<Box<dyn Game>>;
+    fn update(&mut self, keystate: &KeyState);
+    fn draw(&self, context: &Renderer);
+}
+```
+
+Now, we can pass KeyState to the update function on every loop:
+
+```rust
+impl GameLoop {
+    pub async fn start(mut game: impl Game + 'static) -> Result<()> {
+    ...
+        /* Before
+            while game_loop.accumulated_delta > FRAME_SIZE {
+                game.update();
+                game_loop.accumulated_delta -= FRAME_SIZE;
+            }
+        */
+
+            while game_loop.accumulated_delta > frame_size {
+                game.update(&keystate);
+                game_loop.accumulated_delta -= frame_size;
+            }
+...
+```
+Finally, to keep our game compiling, we will need to update the `WalkTheDog::update`
+signature, over in the `game` module, to match and bring KeyState in scope:
+
+```rust
+// filename: src/game.rs
+use crate::engine::KeyState;
+
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    ...
+    fn update(&mut self, keystate: &KeyState) {
+        ...
+```
 
