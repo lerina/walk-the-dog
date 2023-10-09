@@ -450,10 +450,212 @@ to make it a lot more ergonomic to use.
 The various states know how to transition from one state to another, 
 and the machine knows when to do the transitions.
 
+### Integrating the state machine
+Now that we've built a state machine, albeit one with two states, we need to actually use
+it for something. Recall our current game, let RHB run throughout a meaningless void.
+We're going to want to change it so that RHB starts in the left corner and begins running
+when the user hits the right arrow key. In other words, they will transition from Idle to
+Running . When that happens, we'll also want to make sure we're showing the appropriate
+animation.
+We'll start by putting RedHatBoy in the WalkTheDog game:
 
+```rust
+// filename: src/game.rs
 
+pub struct WalkTheDog {
+    image: Option<HtmlImageElement>,
+    sheet: Option<Sheet>,
+    frame: u8,
+    position: Point,
+    rhb: Option<RedHatBoy>,     //<--- add RedHatBoy
+}
 
+impl WalkTheDog {
+    pub fn new() -> Self {
+        WalkTheDog {
+            image: None,
+            sheet: None,
+            frame: 0,
+            position: Point {x: 0, y: 0},
+            rhb: None,         // <--  must wait for the spritesheet
+        }
+    }
+}
+```
 
+RHB will need to be an Option for now because RedHatBoy contains a sprite sheet.
+Since the sprite sheet isn't available until the image is loaded in initialize , we have
+to make rhb an Option type.
 
+We'll want to initialize the machine in the initialize function, and for that purpose, 
+we'll want to create a convenient `new` method for the `Idle` state:
 
+```rust
+// filename: src/game.rs
+
+mod red_hat_boy_states {
+    use crate::engine::Point;
+
+    const FLOOR: i16 = 475;
+    ...
+    impl RedHatBoyState<Idle> {
+
+        pub fn new() -> Self {
+            RedHatBoyState {
+                context: RedHatBoyContext {
+                        frame: 0,
+                        position: Point { x: 0, y: FLOOR },
+                        velocity: Point { x: 0, y: 0 },
+                },
+                _state: Idle {},
+            }//^-- RedHatBoyState
+        }//^-- fn new
+
+        pub fn run(self) -> RedHatBoyState<Running> {
+            ...
+        ...
+    }
+
+```
+
+Because `Idle` is the **initial state**, it's the only state that will get a `new` function. 
+We've also introduced a constant called `FLOOR` that marks the bottom of the screen, 
+where RHB will land when he jumps
+
+Now, in Game initialize , we still have a compiler error because we haven't set up
+RedHatBoy in the game. 
+We can do that right after we've loaded the sprite sheet, 
+and we'll keep two copies of the sprite sheet around; 
+not because we want two copies, but because we'll delete all the old code 
+when we've successfully replaced it with the new code. 
+Thats also Compiler-driven-development
+
+```rust
+// filename: src/game.rs
+use anyhow::{Result, anyhow}
+...
+
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    async fn initialize(&self) -> Result<Box<dyn Game>> {
+        //let sheet: Sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
+
+        let sheet: Option<Sheet> = 
+                        browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;        
+        let image = Some(engine::load_image("../resources/pix/rhb.png").await?);
+        
+        //let sheet = Some(sheet); don't need this anymore we made sheet Option<Sheet>
+
+        //Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame, position: self.position, }))
+
+        Ok(Box::new(WalkTheDog { image: image.clone(),
+                                 sheet: sheet.clone(),
+                                 frame: self.frame,
+                                 position: self.position,
+                                 rhb: Some(RedHatBoy::new( 
+                                    sheet.clone().ok_or_else(|| anyhow! ("No Sheet Present"))?,
+                                    image.clone().ok_or_else(|| anyhow! ("No Image Present"))?,
+                                 )),
+        })) //^-- Ok
+    }//^-- async fn initialize
+
+    fn update(&mut self, keystate: &KeyState) {
+        ...
+
+```
+
+We had to change a surprising amount of code here, because of Rust's borrowing rules.
+
+Our intent is to clone sheet and image and send those into the `RedHatBoy::new` method. 
+However, if we do that, we also need to clone image and sheet when setting the fields 
+for image and sheet on `WalkTheDogStruct`. 
+Why? Because the image: 
+image line is a move, and can't be accessed after that. 
+That's the borrow after move error.
+
+Instead we clone image and sheet and move the cloned instances into `WalkTheDog`. 
+Then when creating the `RedHatBoy` we clone them again.
+
+The same goes for sheet. 
+We also have to explicitly call out the type of sheet when we assign it in the first place 
+because the compiler can't infer the type anymore. 
+
+Fortunately, this is an intermediate step; we are working past the compiler errors 
+and will eventually reduce this code to what we actually need. 
+We can't yet because we've replaced one compiler error with two!
+
+Before, the rhb field wasn't filled in when we created `WalkTheDog`, 
+so that didn't compile. In order to set the rhb field to something, 
+we are presuming a `RedHatBoy::new` method exists, but it doesn't, so that doesn't compile. 
+
+We are also passing the soon-to-exist constructor clones of sheet and image. 
+The Sheet type doesn't support clone yet, so that doesn't compile either. 
+
+We'll need to fix both of these compiler errors to move forward.
+
+Before we continue, I want to note how we use the `ok_or_else` construct on each
+clone call, and then the `?` operator. 
+
+RedHatBoy doesn't need to hold Option<Sheet> or Option<HtmlImageElement>, 
+so its constructor will take Sheet and HtmlImageElement. 
+Calling `ok_or_else` will convert `Option` into `Result`, 
+and `?` will return from the initialize method with `Error` if the value isn't present. 
+
+This prevents the rest of the code from having to continually validate 
+that the Option type is present, so the code will be a little bit cleaner. 
+The Option type is great, but at any time you can replace working with an Option type 
+with the actual value it's wrapping.
+
+The easiest of the two compiler errors to fix is the fact that sheet doesn't implement
+clone. 
+
+Many in the Rust community derive `Clone` on any public type, 
+and while I won't be following that practice in this book, 
+there's no reason not to add it to Sheet and the types it references, 
+as shown here:
+
+```rust
+// filename: src/engine.rs
+
+...
+#[derive(Deserialize, Clone)]
+pub struct SheetRect {
+    pub x: i16,
+    pub y: i16,
+    pub w: i16,
+    pub h: i16,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Cell {
+    pub frame: SheetRect,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Sheet {
+    pub frames: HashMap<String, Cell>,
+}
+```
+
+Now, we're down to one compiler error, RedHatBoy doesn't have a `new` function, so let's
+create an `impl` block for the `RedHatBoy` struct and define that, as shown here:
+
+```rust
+// filename: src/game.rs
+
+impl RedHatBoy {
+    fn new(sheet: Sheet, image: HtmlImageElement) -> Self {
+        RedHatBoy {
+            state_machine: RedHatBoyStateMachine::Idle(RedHatBoyState::new()),
+            sprite_sheet: sheet,
+            image,
+        }
+    }
+
+```
+
+This creates a new `RedHatBoy` with a state machine in the `Idle` state. 
+We've also loaded `sprite_sheet` and `image` in the initialize function 
+and passed them to this constructor. 
+Congratulations! Our code compiles
 

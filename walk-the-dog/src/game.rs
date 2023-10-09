@@ -1,6 +1,6 @@
 use std::{collections::HashMap, rc::Rc, sync::Mutex};
 use crate::{ browser, engine::{self, Game, Point, Rect, Renderer, Sheet, KeyState},};
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use serde::Deserialize;
 use web_sys::HtmlImageElement;
@@ -12,6 +12,7 @@ pub struct WalkTheDog {
     sheet: Option<Sheet>,
     frame: u8,
     position: Point,
+    rhb: Option<RedHatBoy>,
 }
 
 impl WalkTheDog {
@@ -21,6 +22,7 @@ impl WalkTheDog {
             sheet: None,
             frame: 0,
             position: Point {x: 0, y: 0},
+            rhb: None,
         }
     }
 }
@@ -28,12 +30,23 @@ impl WalkTheDog {
 #[async_trait(?Send)]
 impl Game for WalkTheDog {
     async fn initialize(&self) -> Result<Box<dyn Game>> {
-        let sheet: Sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
+        //let sheet: Sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
+        let sheet: Option<Sheet> = 
+                        browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;        
         let image = Some(engine::load_image("../resources/pix/rhb.png").await?);
-        let sheet = Some(sheet);
+        //let sheet = Some(sheet);
 
-        Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame, position: self.position, }))
-    }
+        //Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame, position: self.position, }))
+        Ok(Box::new(WalkTheDog { image: image.clone(),
+                                 sheet: sheet.clone(),
+                                 frame: self.frame,
+                                 position: self.position,
+                                 rhb: Some(RedHatBoy::new( 
+                                    sheet.clone().ok_or_else(|| anyhow! ("No Sheet Present"))?,
+                                    image.clone().ok_or_else(|| anyhow! ("No Image Present"))?,
+                                 )),
+        })) //^-- Ok
+    }//^-- async fn initialize
 
     fn update(&mut self, keystate: &KeyState) {
         let mut velocity = Point { x: 0, y: 0 };
@@ -90,6 +103,16 @@ struct RedHatBoy {
 }
 
 
+impl RedHatBoy {
+    fn new(sheet: Sheet, image: HtmlImageElement) -> Self {
+        RedHatBoy {
+            state_machine: RedHatBoyStateMachine::Idle(RedHatBoyState::new()),
+            sprite_sheet: sheet,
+            image,
+        }
+    }
+}//^-- impl RedHatBoy
+
 #[derive(Copy, Clone)]
 enum RedHatBoyStateMachine {
     Idle(RedHatBoyState<Idle>),
@@ -119,7 +142,8 @@ impl From<RedHatBoyState<Running>> for RedHatBoyStateMachine {
 
 mod red_hat_boy_states {
     use crate::engine::Point;
-
+    
+    const FLOOR: i16 = 475;
 
     #[derive(Copy, Clone)]
     pub struct Idle;
@@ -135,6 +159,18 @@ mod red_hat_boy_states {
     }
 
     impl RedHatBoyState<Idle> {
+
+        pub fn new() -> Self {
+            RedHatBoyState {
+                context: RedHatBoyContext {
+                        frame: 0,
+                        position: Point { x: 0, y: FLOOR },
+                        velocity: Point { x: 0, y: 0 },
+                },
+                _state: Idle {},
+            }//^-- RedHatBoyState
+        }//^-- fn new
+
         pub fn run(self) -> RedHatBoyState<Running> {
             RedHatBoyState {
                 context: self.context,

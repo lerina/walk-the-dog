@@ -23,11 +23,7 @@ pub struct Rect {
     pub height: f32,
 }
 
-#[derive(Deserialize)]
-pub struct Cell {
-    pub frame: SheetRect,
-}
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct SheetRect {
     pub x: i16,
     pub y: i16,
@@ -35,8 +31,12 @@ pub struct SheetRect {
     pub h: i16,
 }
 
+#[derive(Deserialize, Clone)]
+pub struct Cell {
+    pub frame: SheetRect,
+}
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct Sheet {
     pub frames: HashMap<String, Cell>,
 }
