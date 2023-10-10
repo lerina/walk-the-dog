@@ -29,14 +29,12 @@ impl WalkTheDog {
 
 #[async_trait(?Send)]
 impl Game for WalkTheDog {
+
     async fn initialize(&self) -> Result<Box<dyn Game>> {
-        //let sheet: Sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
         let sheet: Option<Sheet> = 
                         browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;        
         let image = Some(engine::load_image("../resources/pix/rhb.png").await?);
-        //let sheet = Some(sheet);
-
-        //Ok(Box::new(WalkTheDog { image, sheet, frame: self.frame, position: self.position, }))
+        
         Ok(Box::new(WalkTheDog { image: image.clone(),
                                  sheet: sheet.clone(),
                                  frame: self.frame,
@@ -59,6 +57,8 @@ impl Game for WalkTheDog {
         
         self.position.x += velocity.x;
         self.position.y += velocity.y;
+
+        self.rhb.as_mut().unwrap().update();
     }
 
     fn draw(&self, renderer: &Renderer) {
@@ -91,6 +91,7 @@ impl Game for WalkTheDog {
         });
 
 
+        self.rhb.as_ref().unwrap().draw(renderer);
     }//^-- draw()
 }
 
@@ -110,6 +111,38 @@ impl RedHatBoy {
             sprite_sheet: sheet,
             image,
         }
+    }
+
+    fn draw(&self, renderer: &Renderer) {
+        let frame_name = format!("{} ({}).png", 
+                                 self.state_machine.frame_name(),
+                                 (self.state_machine.context().frame / 3) + 1);
+        let sprite = self.sprite_sheet
+                        .frames
+                        .get(&frame_name)
+                        .expect("Cell not found");
+
+        renderer.draw_image(
+                            &self.image,
+                            &Rect {
+                                x: sprite.frame.x.into(),
+                                y: sprite.frame.y.into(),
+                                width: sprite.frame.w.into(),
+                                height: sprite.frame.h.into(),
+                            },
+                            &Rect {
+                                x: self.state_machine.context()
+                                .position.x.into(),
+                                y: self.state_machine.context()
+                                .position.y.into(),
+                                width: sprite.frame.w.into(),
+                                height: sprite.frame.h.into(),
+                            },);
+        
+    }//^-- fn draw
+
+    fn update(&mut self) {
+        self.state_machine = self.state_machine.update();
     }
 }//^-- impl RedHatBoy
 
@@ -131,7 +164,36 @@ impl RedHatBoyStateMachine {
             _ => self,
         }
     }
-}
+
+    fn frame_name(&self) ->&str {
+        match self {
+            RedHatBoyStateMachine::Idle(state) => state.frame_name(),
+            RedHatBoyStateMachine::Running(state) => state.frame_name(),
+        }
+    }
+
+    fn context(&self) ->&RedHatBoyContext {
+        match self {
+            RedHatBoyStateMachine::Idle(state) =>&state.context(),
+            RedHatBoyStateMachine::Running(state) =>&state.context(),
+        }
+    }
+
+    fn update(self) -> Self {
+        match self {
+            RedHatBoyStateMachine::Idle(mut state) => {
+                if state.context.frame < 29 {
+                    state.context.frame += 1;
+                } else {
+                    state.context.frame = 0;
+                }
+
+                RedHatBoyStateMachine::Idle(state)
+            }
+            RedHatBoyStateMachine::Running(_) => self,
+        }
+    }
+}//^-- impl
 
 
 impl From<RedHatBoyState<Running>> for RedHatBoyStateMachine {
@@ -144,6 +206,8 @@ mod red_hat_boy_states {
     use crate::engine::Point;
     
     const FLOOR: i16 = 475;
+    const IDLE_FRAME_NAME: &str = "Idle";
+    const RUN_FRAME_NAME: &str = "Run";
 
     #[derive(Copy, Clone)]
     pub struct Idle;
@@ -154,7 +218,7 @@ mod red_hat_boy_states {
 
     #[derive(Copy, Clone)]
     pub struct RedHatBoyState<S> {
-        context: RedHatBoyContext,
+        pub context: RedHatBoyContext,
         _state: S,
     }
 
@@ -177,13 +241,31 @@ mod red_hat_boy_states {
                 _state: Running {},
             }
         }
+
+        pub fn frame_name(&self) -> &str {
+            IDLE_FRAME_NAME
+        }
+
+    }//^-- impl RedHatBoyState<Idle>
+
+    impl RedHatBoyState<Running> {
+        pub fn frame_name(&self) -> &str {
+            RUN_FRAME_NAME
+        }
     }
+
+    impl<S> RedHatBoyState<S> {
+        pub fn context(&self) -> &RedHatBoyContext {
+            &self.context
+        }
+    }
+
 
     #[derive(Copy, Clone)]
     pub struct RedHatBoyContext {
-        frame: u8,
-        position: Point,
-        velocity: Point,
+        pub frame: u8,
+        pub position: Point,
+        pub velocity: Point,
     }
 
 }//^-- mod red_hat_boy_states
