@@ -189,8 +189,18 @@ impl RedHatBoyStateMachine {
                 }
 
                 RedHatBoyStateMachine::Idle(state)
+            },
+            //RedHatBoyStateMachine::Running(_) => self,
+            RedHatBoyStateMachine::Running(mut state) => {
+                if state.context.frame < 23 {
+                    state.context.frame += 1;
+                } else {
+                    state.context.frame = 0;
+                }
+
+                RedHatBoyStateMachine::Running(state)
             }
-            RedHatBoyStateMachine::Running(_) => self,
+
         }
     }
 }//^-- impl

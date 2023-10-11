@@ -339,13 +339,82 @@ RHB is running all around the void right now! We just need to move the details i
 state machine, so that we as programmers can actually see the states and what they do
 as one coherent unit.
 
+We can do that quickly by just modifying `update` in `RedHatBoyStateMachine` to
+match the version in `Idle`, with the different frame count for the run animation. 
+That's shown as follows:
+
+```rust
+// filename: src/game.rs
+
+impl RedHatBoyStateMachine {
+...
+    fn update(self) -> Self {
+        match self {
+            RedHatBoyStateMachine::Idle(mut state) => {
+                ...
+
+                RedHatBoyStateMachine::Idle(state)
+            },
+            //RedHatBoyStateMachine::Running(_) => self,
+            RedHatBoyStateMachine::Running(mut state) => {
+                if state.context.frame < 23 {
+                    state.context.frame += 1;
+                } else {
+                    state.context.frame = 0;
+                }
+
+                RedHatBoyStateMachine::Running(state)
+            }
+
+        }
+    }
+}//^-- impl 
+```
+
+Now, the state machine is theoretically capable of drawing the run animation, 
+but we haven't written anything to cause that transition. 
+
+The other thing missing is potentially more subtle. 
+The Running animation has 23 frames, and the Idle animation has 29 .
+If we were to transform from Idle to Running with the frame count at 24, the game
+would crash.
 
 
+Finally, I think we can all agree that the kind of duplication 
+that we have here can be improved. 
+The only difference between the two functions is the frame count. 
 
+So, we have a few things to do:
 
+1. Refactor the duplicated code.
+The code that updates `context.frame` suffers from a code smell called 
+Feature Envy ( https://bit.ly/3ytptHA ) because the update function is 
+operating over and over again on context. 
+Why not move that function to RedHatBoyContext? That's shown here:
 
+```rust
+// filename: src/game.rs
 
+const IDLE_FRAMES: u8 = 29;
+const RUNNING_FRAMES: u8 = 23;
+...
+impl RedHatBoyStateMachine {
+    fn update(self) -> Self {
+        match self {
+            RedHatBoyStateMachine::Idle(mut state) => {
+                state.context =
+                state.context.update(IDLE_FRAMES);
+                RedHatBoyStateMachine::Idle(state)
+            }
+            RedHatBoyStateMachine::Running(mut state) => {
+                state.context = state.context.update(
+                RUNNING_FRAMES);
+                RedHatBoyStateMachine::Running(state)
+            }
+        }
+    }
 
+}//^-- impl
 
 
 
