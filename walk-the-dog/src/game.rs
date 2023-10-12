@@ -140,6 +140,7 @@ enum RedHatBoyStateMachine {
 pub enum Event {
     Run,
     Slide,
+    Update,
 }
 
 
@@ -148,6 +149,9 @@ impl RedHatBoyStateMachine {
         match (self, event) {
             (RedHatBoyStateMachine::Idle(state), Event::Run) => state.run().into(), 
             (RedHatBoyStateMachine::Running(state), Event::Slide) => state.slide().into(),
+            (RedHatBoyStateMachine::Idle(state), Event::Update) => state.update().into(),
+            (RedHatBoyStateMachine::Running(state), Event::Update) => state.update().into(),
+
             _ => self,
         }
     }
@@ -169,7 +173,10 @@ impl RedHatBoyStateMachine {
         }
     }
 
-
+    fn update(self) -> Self {
+        self.transition(Event::Update)
+    }
+    /*
     fn update(self) -> Self {
         match self {
             RedHatBoyStateMachine::Idle(mut state) => {
@@ -198,6 +205,7 @@ impl RedHatBoyStateMachine {
 
         }
     }
+    */
 }//^-- impl
 
 
@@ -210,6 +218,12 @@ impl From<RedHatBoyState<Running>> for RedHatBoyStateMachine {
 impl From<RedHatBoyState<Sliding>> for RedHatBoyStateMachine {
     fn from(state: RedHatBoyState<Sliding>) -> Self {
         RedHatBoyStateMachine::Sliding(state)
+    }
+}
+
+impl From<RedHatBoyState<Idle>> for RedHatBoyStateMachine {
+    fn from(state: RedHatBoyState<Idle>) -> Self {
+        RedHatBoyStateMachine::Idle(state)
     }
 }
 
@@ -265,9 +279,16 @@ mod red_hat_boy_states {
         pub fn frame_name(&self) -> &str {
             IDLE_FRAME_NAME
         }
-
+        
+        /*
         pub fn update(&mut self) {
             self.context = self.context.update(IDLE_FRAMES);
+        }
+        */
+        pub fn update(mut self) -> Self {
+            self.context = self.context.update(IDLE_FRAMES);
+                
+            self
         }
 
     }//^-- impl RedHatBoyState<Idle>
@@ -277,8 +298,11 @@ mod red_hat_boy_states {
             RUN_FRAME_NAME
         }
 
-        pub fn update(&mut self) {
+        //pub fn update(&mut self)
+        pub fn update(mut self) -> Self {
             self.context = self.context.update(RUNNING_FRAMES);
+
+            self
         }
 
         pub fn slide(self) -> RedHatBoyState<Sliding> {

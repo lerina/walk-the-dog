@@ -236,16 +236,195 @@ after updating in the sliding branch, as follows:
 ```rust
 // filename: src/game.rs
 
+impl RedHatBoyStateMachine {
+    ...
 
+    fn update(self) -> Self {
+        match self {
+            ...
+            RedHatBoyStateMachine::Running(mut state) => {
+            ...
+
+            RedHatBoyStateMachine::Sliding(mut state) => {
+                state.update(SLIDING_FRAMES);
+                if state.context().frame >= SLIDING_FRAMES {
+                    RedHatBoyStateMachine::Running(
+                    state.stand())
+                } else {
+                    RedHatBoyStateMachine::Sliding(state)
+                }
+            }
+        }
+    }
 ```
 
 
+This doesn't compile yet, because `stand` isn't defined yet and because `SLIDING_FRAMES`
+is in the `red_hat_boy_states` module. You might think that we can make 
+`SLIDING_FRAMES` public and define a `stand` method, or we could move `SLIDING_FRAMES`
+into the game module. 
+These will both work but I think it's time to look 
+a little more holistically at our update method.
+
+Every arm of the match statement updates the current state 
+and then returns a new state. 
+In the case of `Running` and `Idle`, it was always the same state, 
+but in the case of `Sliding`, sometimes it's the `Running` state. 
+
+It turns out `update` is a transition, just one
+that sometimes transitions to the state it started from.
+
+If we wanted to be strict about it, we could say that `Sliding` transitions to an Updating
+state when it gets an `Update` event, then it can transition back to `Sliding` or `Running`. 
+
+This is a case where the state exists, at least conceptually, 
+but we don't actually have to create it in our code.
+
+`update` on the Sliding state is really best modeled as a transition 
+because it's a method that ultimately returns a state. 
+Come to think of it, that's exactly what the other arms in the `update` method are too! 
+Yes, they don't ever transition to another state, but each branch calls `update` 
+and then returns a state. 
+
+So, before we add `Sliding` to the `update` method, 
+let's refactor to make `update` a transition for both of the other states.
+
+Since we're using Compiler-Driven Development, 
+we'll change the update method to work as if `update` is already a transition:
+
+```rust
+// filename: src/game.rs
+
+pub enum Event {
+    Run,
+    Slide,
+    Update,
+}
+
+```
+
+now match must handle the Update Variant
+
+```rust
+// filename: src/game.rs
+
+impl RedHatBoyStateMachine {
+    fn transition(self, event: Event) -> Self {
+        match (self, event) {
+            //Run
+            (RedHatBoyStateMachine::Idle(state), Event::Run) => state.run().into(), 
+            
+            //Slide            
+            (RedHatBoyStateMachine::Running(state), Event::Slide) => state.slide().into(),
+
+            //Update
+            (RedHatBoyStateMachine::Idle(state), Event::Update) => state.update().into(),
+            (RedHatBoyStateMachine::Running(state), Event::Update) => state.update().into(),
+
+            _ => self,
+        }
+    }
+
+    // new update replacing the old one
+    fn update(self) -> Self {
+        self.transition(Event::Update)
+    }
+
+```
+
+With these changes, we've turned `Update` into `Event` and added two more arms 
+to match in the transition method. Both of those arms work the same way as the
+other transitions: 
+they call a method on the typestate and then convert the state into the
+`RedHatBoyStateMachine` enum with the `From` trait (that's the `.into()` ).
+
+For now, there's no way to convert from the (), or Unit, to a value 
+of the `RedHatBoyStateMachine` type. 
+
+That's not what we want to fix; 
+we want to make both of the update calls on the states return new states. 
+Those changes are next:
+
+```rust
+// filename: src/game.rs
+
+mod red_hat_boy_states {
+    impl RedHatBoyState<Idle> {
+        ...
+        /*
+        pub fn update(&mut self) {
+            self.context = self.context.update(IDLE_FRAMES);
+        }
+        */
+
+        pub fn update(mut self) -> Self { //NOTE mut not &mut
+            self.context = self.context.update(IDLE_FRAMES);
+                
+            self
+        }
+
+        ...
+    }//^-- impl RedHatBoyState<Idle>
+
+
+    impl RedHatBoyState<Running> {
+        ...
+        pub fn update(mut self) -> Self {
+            self.context = self.context.update(RUNNING_FRAMES);
+
+            self
+        }
+    }//^-- impl RedHatBoyState<Running>
 
 
 
+```
+
+The changes are small but important. 
+The update method for `RedHatBoyState<Idle>` and `RedHatBoyState<Running>` both return `Self` now, because even though the state doesn't change, these are still typestate methods that return a new state. 
+
+They also take `mut self` now instead of `&mut self`. 
+You can't return self if you mutably borrow it, so this method stopped compiling. 
+
+More importantly, this means these methods don't make unnecessary copies. 
+They take ownership of self when called, and then return it. 
+So, if you're worried about an optimization problem because of extra copies, 
+you don't have to be.
+
+Now, we're down to one compiler error, which we've seen before:
+
+```sh
+the trait 'From<red_hat_boy_states::RedHatBoyState<red_hat_boy_
+states::Idle>>' is not implemented for 'RedHatBoyStateMachine'
+```
 
 
+We didn't implement a conversion from the `Idle` state back to the
+`RedHatBoyStateMachine` enum. 
 
+That's similar to the other ones we wrote,
+implementing `From<RedHatBoyState<Idle>>` , as shown here:
+
+```rust
+// filename: src/game.rs
+
+...
+impl From<RedHatBoyState<Sliding>> for RedHatBoyStateMachine {
+...
+
+impl From<RedHatBoyState<Idle>> for RedHatBoyStateMachine {
+    fn from(state: RedHatBoyState<Idle>) -> Self {
+        RedHatBoyStateMachine::Idle(state)
+    }
+}
+```
+
+Remember that these implementations of the `From` trait are not 
+in the `red_hat_boy_states` module. 
+
+The `red_hat_boy_states` module knows about the **individual states**
+but does not know about `RedHatBoyStateMachine`. 
+That's not its job.
 
 
 
