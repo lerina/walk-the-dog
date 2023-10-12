@@ -1,430 +1,184 @@
-## Transitioning to sliding
+## Transitioning to sliding and back again
 
-Transitioning from running to sliding will involve adding a new state for sliding, 
-so that we see the sliding action, but also checking for when a slide is complete 
-and transitioning back into the running state. 
+Part of the reason we used the typestate pattern for our individual states 
+is so that we get compiler errors when we make a mistake. 
 
-This will mean sliding will have its own variation on the update function. 
-We can start by adding sliding on the down arrow and treating it all just like running. 
+For instance, if we call run when we are in the `Running` state, 
+it won't even compile because there is no such method. 
 
-We'll go through this quickly because most of it is familiar. 
-Let's start by adding sliding on the down arrow in the update method of WalkTheDog:
+There is one place this doesn't hold, the transition method on the `RedHatBoyStateMachine` enum .
 
-```rust
-// filename: src/game.rs
+If you call `transition` with a `RedHatBoyStateMachine` variant 
+and an `Event` variant pair that don't have a match, it returns Self.
 
-impl Game for WalkTheDog {
-    fn update(&mut self, keystate: &KeyState) {
-        ...
-        //if keystate.is_pressed("ArrowDown") { velocity.y += 3; }
-        if keystate.is_pressed("ArrowDown") {
-            self.rhb.as_mut().unwrap().slide();
-        }
-        ...
-```
-It's time to follow the compiler. 
-RedHatBoy doesn't have a `slide` method, so let's add that:
+That's why our RHB is sitting down. 
+
+He transitions to `Sliding` and then stops updating, staying in the same state forever. 
+
+We'll fix that by adding the match for the `Update` event
+and then, you guessed it, follow the compiler to implement the **sliding animation**.
+
+This starts by adding the match to the transition method, as shown here:
 
 ```rust
-// filename: src/game.rs
-
-impl RedHatBoy {
-    ...
-    fn run_right(&mut self) {
-        self.state_machine = self.state_machine.transition(Event::Run);
-    }
-
-    fn slide(&mut self) {
-        self.state_machine = self.state_machine.transition(Event::Slide);
-    }
-}
-
-```
-
-Transitioning via `Event::Slide` doesn't exist. 
-There's no `Event::Slide` at all, so let's add those next:
-
-
-```rust
-// filename: src/game.rs
-
-pub enum Event {
-    Run,
-    Slide,
-}
-
-...
+// src/game.rs
 
 impl RedHatBoyStateMachine {
     fn transition(self, event: Event) -> Self {
         match (self, event) {
-            (RedHatBoyStateMachine::Idle(state), Event::Run) 
-                => state.run().into(), 
-            (RedHatBoyStateMachine::Running(state), Event::Slide) 
-                => state.slide().into(),
-            _ => self,
-        }
-    }
-    ...
-```
-
-There's nothing new in the preceding code block. When RHB is Running, 
-it can transition to `Sliding` via the `Event::Slide` event and the `slide` method, 
-which doesn't exist on the `RedHatBoyState<Running>` typestate. 
-
-This is all very similar to how we went from `Idle` to `Running`.
-To continue with the compiler, we need to add a `slide` method to the
-`RedHatBoyState<Running>` typestate:
-
-```rust
-// filename: src/game.rs
-
-mod red_hat_boy_states {
-    ...
-    impl RedHatBoyState<Running> {
-        pub fn frame_name(&self) -> &str {
-            RUN_FRAME_NAME
-        }        
         ...
-        pub fn slide(self) -> RedHatBoyState<Sliding> {
-            RedHatBoyState {
-                context: self.context.reset_frame(),
-                _state: Sliding {},
-            }
+        (RedHatBoyStateMachine::Sliding(state), Event::Update) => state.update().into(),
+        _ => self,
         }
     }
 
 ```
 
-The `slide` method on `RedHatBoyState<Running>` converts the state into
-`RedHatBoyState<Sliding>`, only calling `reset_frame` on `context` to
-make sure the sliding animation starts playing at frame 0. 
-We also call into on the `slide` method, which needs to convert `RedHatBoyState<Sliding>` 
-into a `RedHatBoyStateMachine` variant. 
+This match is just like the others; we match on Sliding and Update and call update .
+Just like before, we'll get an error: 
 
-That means we need to create the variant and create a `From` implementation for it, 
-as shown here:
-
-
-```rust
-// filename: src/game.rs
-
-#[derive(Copy, Clone)]
-enum RedHatBoyStateMachine {
-    Idle(RedHatBoyState<Idle>),
-    Running(RedHatBoyState<Running>),
-    Sliding(RedHatBoyState<Sliding>),
-}
-
-...
-impl From<RedHatBoyState<Running>> for RedHatBoyStateMachine {
-    fn from(state: RedHatBoyState<Running>) -> Self {
-        RedHatBoyStateMachine::Running(state)
-    }
-}
-
-impl From<RedHatBoyState<Sliding>> for RedHatBoyStateMachine {
-    fn from(state: RedHatBoyState<Sliding>) -> Self {
-        RedHatBoyStateMachine::Sliding(state)
-    }
-}
+```sh
+the trait 'From<()>' is not implemented for 'RedHatBoyStateMachine'
 ```
 
-At this point, you'll see errors on the `frame_name`, `context`, and `update` methods
-of `RedHatBoyStateMachine` because their corresponding match calls don't have
-cases for the new `Sliding` variant. 
+The Sliding state still has an update method that doesn't return a state. 
+That's not going to work with our current setup, but it's not as simple 
+as making the update method return Self, as on the other two states.
 
-We can fix that by adding cases to those match statements, 
-which will mimic the other cases:
+Remember, there are two possible states that can come from the update method
+on Sliding: `Sliding` and `Running`. 
+How is that going to work with our current setup? 
+What we'll need to do is have update return 
+an `SlidingEndState` enum that can be either `Sliding` or `Running`, 
+and then we'll implement a `From` trait that will convert that 
+into the appropriate variant of `RedHatBoyStateMachine`.
 
-```rust
-// filename: src/game.rs
-
-impl RedHatBoyStateMachine {
-    fn transition(self, event: Event) -> Self {
-    ...
-    
-    fn frame_name(&self) ->&str {
-        match self {
-            RedHatBoyStateMachine::Idle(state) => state.frame_name(),
-            RedHatBoyStateMachine::Running(state) => state.frame_name(),
-            RedHatBoyStateMachine::Sliding(state) => state.frame_name(),
-        }
-    }
-    ...
-    fn context(&self) ->&RedHatBoyContext{
-        match self {
-            ...
-            RedHatBoyStateMachine::Sliding(state) => &state.context(),
-        }
-    }
-
-    fn update(self) -> Self {
-        match self {
-            ...
-            RedHatBoyStateMachine::Sliding(mut state) => {
-                state.update();
-                RedHatBoyStateMachine::Sliding(state)
-            },
-        }
-    }
-
-}//^-- impl RedHatBoyStateMachine
-```
-Once again, we've replaced one compiler error with another. 
-There is no Sliding state, and it doesn't have the methods we assumed it would. 
-
-We can fix that by filling it in, adding some constants for good measure:
-add 
-```rust
-// filename: src/game.rs
-
-mod red_hat_boy_states {
-    const SLIDING_FRAMES: u8 = 14;
-    const SLIDING_FRAME_NAME: &str = "Slide";
-    ...
-
-    #[derive(Copy, Clone)]
-    pub struct Running;
-
-    #[derive(Copy, Clone)]
-    pub struct Sliding;
-```
-
-then   `impl RedHatBoyState<Sliding>`
+We can modify the update method on `RedHatBoyState<Sliding>` 
+to work like the one we proposed at the beginning of this section:
 
 ```rust
-// filename: src/game.rs
+// src/game.rs
 
 mod red_hat_boy_states {
     ...
-    #[derive(Copy, Clone)]
-    pub struct Sliding;
-
-    ...
-
-    impl RedHatBoyState<Running> {
-    ...
-
     impl RedHatBoyState<Sliding> {
-        pub fn frame_name(&self) -> &str {
-            SLIDING_FRAME_NAME
-        }
-
+        ...
+    /*
         pub fn update(&mut self) {
             self.context = self.context.update(SLIDING_FRAMES);
         }
-    }
+    */
 
-    impl<S> RedHatBoyState<S> {
-    ...
-
-}//^-- mod red_hat_boy_states
-```
-
-Now RHB can run and slide.
-
-Stopping RHB from sliding is a little different than what we've done before. 
-What we need to do is identify when the slide animation is complete, 
-then transition right back into running without any user input. 
-
-We'll start by checking whether the animation is done in the update method of the enum, 
-which represents our machine, and then create a new transition from sliding back into running. 
-We can do that by modifying the `RedHatBoyStateMachine` `update` method to check 
-after updating in the sliding branch, as follows:
-
-```rust
-// filename: src/game.rs
-
-impl RedHatBoyStateMachine {
-    ...
-
-    fn update(self) -> Self {
-        match self {
-            ...
-            RedHatBoyStateMachine::Running(mut state) => {
-            ...
-
-            RedHatBoyStateMachine::Sliding(mut state) => {
-                state.update(SLIDING_FRAMES);
-                if state.context().frame >= SLIDING_FRAMES {
-                    RedHatBoyStateMachine::Running(
-                    state.stand())
-                } else {
-                    RedHatBoyStateMachine::Sliding(state)
-                }
+        pub fn update(mut self) -> SlidingEndState {
+            self.context = self.context.update(SLIDING_FRAMES);
+            if self.context.frame >= SLIDING_FRAMES {
+                SlidingEndState::Complete(self.stand())
+            } else {
+                SlidingEndState::Sliding(self)
             }
         }
-    }
+
+
 ```
 
+We've taken the code that we originally considered putting in the
+`RedHatBoyStateMachine` `update` method and moved it into the `update` method
+of `RedHatBoyState<Sliding>`. 
 
-This doesn't compile yet, because `stand` isn't defined yet and because `SLIDING_FRAMES`
-is in the `red_hat_boy_states` module. You might think that we can make 
-`SLIDING_FRAMES` public and define a `stand` method, or we could move `SLIDING_FRAMES`
-into the game module. 
-These will both work but I think it's time to look 
-a little more holistically at our update method.
+This makes sense conceptually; 
 
-Every arm of the match statement updates the current state 
-and then returns a new state. 
-In the case of `Running` and `Idle`, it was always the same state, 
-but in the case of `Sliding`, sometimes it's the `Running` state. 
+> the state should know how it behaves. 
 
-It turns out `update` is a transition, just one
-that sometimes transitions to the state it started from.
+On every update, we update context, and then check whether the animation is complete, 
+with `if self.context.frame >= SLIDING_FRAMES`. 
 
-If we wanted to be strict about it, we could say that `Sliding` transitions to an Updating
-state when it gets an `Update` event, then it can transition back to `Sliding` or `Running`. 
+If the animation is complete, we return one variant of this new enum that doesn't exist yet:
+`SlidingState`. 
 
-This is a case where the state exists, at least conceptually, 
-but we don't actually have to create it in our code.
+The `SlidingState` variant can either be `Complete` or `Sliding`.
 
-`update` on the Sliding state is really best modeled as a transition 
-because it's a method that ultimately returns a state. 
-Come to think of it, that's exactly what the other arms in the `update` method are too! 
-Yes, they don't ever transition to another state, but each branch calls `update` 
-and then returns a state. 
 
-So, before we add `Sliding` to the `update` method, 
-let's refactor to make `update` a transition for both of the other states.
+Following the compiler yet again, we have two obvious problems: 
+there is no `stand` method and there is no `SlidingEndState` enum. 
 
-Since we're using Compiler-Driven Development, 
-we'll change the update method to work as if `update` is already a transition:
+We can handle both of these right here, next to the code we just wrote, as shown:
 
 ```rust
-// filename: src/game.rs
+// src/game.rs
 
-pub enum Event {
-    Run,
-    Slide,
-    Update,
+impl RedHatBoyState<Sliding> {
+    ...
+    pub fn stand(self) -> RedHatBoyState<Running> {
+        RedHatBoyState {
+            context: self.context.reset_frame(),
+            _state: Running,
+        }
+    }
+    ...
+}//^-- impl RedHatBoyState<Sliding>
+
+pub enum SlidingEndState {
+    Complete(RedHatBoyState<Running>),
+    Sliding(RedHatBoyState<Sliding>),
 }
 
 ```
 
-now match must handle the Update Variant
+The only side effect of the transition to Running is that we call `reset_frame` again on
+context. 
+Remember this has to be done on every transition, otherwise, the program can
+try to animate the new state with frame, which isn't valid and will crash. 
 
-```rust
-// filename: src/game.rs
-
-impl RedHatBoyStateMachine {
-    fn transition(self, event: Event) -> Self {
-        match (self, event) {
-            //Run
-            (RedHatBoyStateMachine::Idle(state), Event::Run) => state.run().into(), 
-            
-            //Slide            
-            (RedHatBoyStateMachine::Running(state), Event::Slide) => state.slide().into(),
-
-            //Update
-            (RedHatBoyStateMachine::Idle(state), Event::Update) => state.update().into(),
-            (RedHatBoyStateMachine::Running(state), Event::Update) => state.update().into(),
-
-            _ => self,
-        }
-    }
-
-    // new update replacing the old one
-    fn update(self) -> Self {
-        self.transition(Event::Update)
-    }
-
-```
-
-With these changes, we've turned `Update` into `Event` and added two more arms 
-to match in the transition method. Both of those arms work the same way as the
-other transitions: 
-they call a method on the typestate and then convert the state into the
-`RedHatBoyStateMachine` enum with the `From` trait (that's the `.into()` ).
-
-For now, there's no way to convert from the (), or Unit, to a value 
-of the `RedHatBoyStateMachine` type. 
-
-That's not what we want to fix; 
-we want to make both of the update calls on the states return new states. 
-Those changes are next:
-
-```rust
-// filename: src/game.rs
-
-mod red_hat_boy_states {
-    impl RedHatBoyState<Idle> {
-        ...
-        /*
-        pub fn update(&mut self) {
-            self.context = self.context.update(IDLE_FRAMES);
-        }
-        */
-
-        pub fn update(mut self) -> Self { //NOTE mut not &mut
-            self.context = self.context.update(IDLE_FRAMES);
-                
-            self
-        }
-
-        ...
-    }//^-- impl RedHatBoyState<Idle>
+So, we'll reset the frame back to 0 on every transition.
+`context: self.context.reset_frame(),`
 
 
-    impl RedHatBoyState<Running> {
-        ...
-        pub fn update(mut self) -> Self {
-            self.context = self.context.update(RUNNING_FRAMES);
-
-            self
-        }
-    }//^-- impl RedHatBoyState<Running>
-
-
-
-```
-
-The changes are small but important. 
-The update method for `RedHatBoyState<Idle>` and `RedHatBoyState<Running>` both return `Self` now, because even though the state doesn't change, these are still typestate methods that return a new state. 
-
-They also take `mut self` now instead of `&mut self`. 
-You can't return self if you mutably borrow it, so this method stopped compiling. 
-
-More importantly, this means these methods don't make unnecessary copies. 
-They take ownership of self when called, and then return it. 
-So, if you're worried about an optimization problem because of extra copies, 
-you don't have to be.
-
-Now, we're down to one compiler error, which we've seen before:
+This leaves us with a compiler error to fix once again. 
+This time, it's the following:
 
 ```sh
-the trait 'From<red_hat_boy_states::RedHatBoyState<red_hat_boy_
-states::Idle>>' is not implemented for 'RedHatBoyStateMachine'
+the trait 'From<SlidingEndState>' is not implemented for 'RedHatBoyStateMachine'
 ```
 
-
-We didn't implement a conversion from the `Idle` state back to the
-`RedHatBoyStateMachine` enum. 
-
-That's similar to the other ones we wrote,
-implementing `From<RedHatBoyState<Idle>>` , as shown here:
+Pay close attention to that source trait. 
+It's not coming from one of the states but from the intermediate `SlidingEndState`. 
+We'll solve it the same way as before, with a `From` trait, 
+but we'll need to use a match statement to pull it out of the enum:
 
 ```rust
-// filename: src/game.rs
+// src/game.rs
 
-...
-impl From<RedHatBoyState<Sliding>> for RedHatBoyStateMachine {
-...
-
-impl From<RedHatBoyState<Idle>> for RedHatBoyStateMachine {
-    fn from(state: RedHatBoyState<Idle>) -> Self {
-        RedHatBoyStateMachine::Idle(state)
+impl From<SlidingEndState> for RedHatBoyStateMachine {
+    fn from(end_state: SlidingEndState) -> Self {
+        match end_state {
+            SlidingEndState::Complete(running_state) => running_state.into(),
+            SlidingEndState::Sliding(sliding_state) => sliding_state.into(),
+        }
     }
 }
+
+mod red_hat_boy_states {
+    ...
 ```
 
-Remember that these implementations of the `From` trait are not 
-in the `red_hat_boy_states` module. 
+Here, we match on `end_state` to get the actual State out of enum, 
+and then call `into` on that state again to get to `RedHatBoyStateMachine`. 
 
-The `red_hat_boy_states` module knows about the **individual states**
-but does not know about `RedHatBoyStateMachine`. 
-That's not its job.
+A little boilerplate, but it makes it easier to do the conversion.
 
+And now we have it! Run the game now and you'll see RHB take a short slide and pop
+back up again to the running state. 
+
+Now that we've added three animations, it's time to deal with these ugly lines 
+in the WalkTheDog implementation: 
+- `self.rhb.as_mut()`.
+- `unwrap().slide()`.
+
+We treat `rhb` as an Option type, not because it's ever really going to be None, 
+but because **we don't have it yet** before the `WalkTheDog` struct is initialized. 
+
+After `WalkTheDog` is initialized, `rhb` can never be `None` again because 
+the state of the system has changed. 
+Fortunately, we now have a tool for dealing with that, the good old state machine!
 
 

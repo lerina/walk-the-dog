@@ -151,6 +151,7 @@ impl RedHatBoyStateMachine {
             (RedHatBoyStateMachine::Running(state), Event::Slide) => state.slide().into(),
             (RedHatBoyStateMachine::Idle(state), Event::Update) => state.update().into(),
             (RedHatBoyStateMachine::Running(state), Event::Update) => state.update().into(),
+            (RedHatBoyStateMachine::Sliding(state), Event::Update) => state.update().into(),
 
             _ => self,
         }
@@ -176,36 +177,7 @@ impl RedHatBoyStateMachine {
     fn update(self) -> Self {
         self.transition(Event::Update)
     }
-    /*
-    fn update(self) -> Self {
-        match self {
-            RedHatBoyStateMachine::Idle(mut state) => {
-                state.update();
-                RedHatBoyStateMachine::Idle(state)
-            },
-            RedHatBoyStateMachine::Running(mut state) => {
-                state.update();
-                RedHatBoyStateMachine::Running(state)
-            },
-            /*
-            RedHatBoyStateMachine::Sliding(mut state) => {
-                state.update();
-                RedHatBoyStateMachine::Sliding(state)
-            },
-            */
-            RedHatBoyStateMachine::Sliding(mut state) => {
-                state.update(SLIDING_FRAMES);
-                if state.context().frame >= SLIDING_FRAMES {
-                    RedHatBoyStateMachine::Running(
-                    state.stand())
-                } else {
-                    RedHatBoyStateMachine::Sliding(state)
-                }
-            },
 
-        }
-    }
-    */
 }//^-- impl
 
 
@@ -228,6 +200,14 @@ impl From<RedHatBoyState<Idle>> for RedHatBoyStateMachine {
 }
 
 
+impl From<SlidingEndState> for RedHatBoyStateMachine {
+    fn from(end_state: SlidingEndState) -> Self {
+        match end_state {
+            SlidingEndState::Complete(running_state) => running_state.into(),
+            SlidingEndState::Sliding(sliding_state) => sliding_state.into(),
+        }
+    }
+}
 
 mod red_hat_boy_states {
     use crate::engine::Point;
@@ -255,6 +235,7 @@ mod red_hat_boy_states {
         context: RedHatBoyContext,
         _state: S,
     }
+
 
     impl RedHatBoyState<Idle> {
 
@@ -319,9 +300,32 @@ mod red_hat_boy_states {
             SLIDING_FRAME_NAME
         }
 
+/*
         pub fn update(&mut self) {
             self.context = self.context.update(SLIDING_FRAMES);
         }
+*/
+        pub fn update(mut self) -> SlidingEndState {
+            self.context = self.context.update(SLIDING_FRAMES);
+            if self.context.frame >= SLIDING_FRAMES {
+                SlidingEndState::Complete(self.stand())
+            } else {
+                SlidingEndState::Sliding(self)
+            }
+        }
+
+        pub fn stand(self) -> RedHatBoyState<Running> {
+            RedHatBoyState {
+                context: self.context.reset_frame(),
+                _state: Running,
+            }
+        }
+
+    }//^-- impl RedHatBoyState<Sliding>
+
+   pub enum SlidingEndState {
+        Complete(RedHatBoyState<Running>),
+        Sliding(RedHatBoyState<Sliding>),
     }
 
     impl<S> RedHatBoyState<S> {
