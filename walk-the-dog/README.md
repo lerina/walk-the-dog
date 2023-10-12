@@ -718,8 +718,12 @@ We don't need to move backward in our actual game, nor stop, so we won't.
 #### Delete the original code.
 
 Now that the new and improved RHB is moving, it's time to get rid of all the
-references in WalkTheDog to the sheet, the element, the frame...basically anything
-that isn't the RedHatBoy struct :
+references in WalkTheDog to the 
+sheet, 
+the element, 
+the frame ...
+
+basically anything that isn't the RedHatBoy struct :
 
 ```rust
 // filename: src/game.rs
@@ -732,6 +736,93 @@ pub struct WalkTheDog {
 Rather than boring you with endless deletes, 
 I'll simply say you can delete all the fields that aren't rhb 
 and follow the compiler errors to delete the rest of the code.
+
+
+Start with `image`.
+
+```rust
+pub struct WalkTheDog {
+    //image: Option<HtmlImageElement>,
+    sheet: Option<Sheet>,
+    frame: u8,
+    position: Point,
+    rhb: Option<RedHatBoy>,
+}
+
+impl WalkTheDog {
+    pub fn new() -> Self {
+        WalkTheDog {
+            //image: None,
+            sheet: None,
+            frame: 0,
+            position: Point {x: 0, y: 0},
+            rhb: None,
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    ...
+    fn draw(&self, renderer: &Renderer) {
+
+/*
+        self.image.as_ref().map(|image| {
+            renderer.draw_image(&self.image.as_ref().unwrap(),
+                &Rect {  x: sprite.frame.x.into(),
+                        y: sprite.frame.y.into(),
+                        width: sprite.frame.w.into(),
+                        height: sprite.frame.h.into(),
+                },
+                &Rect { x: self.position.x.into(),
+                        y: self.position.y.into(),
+                        width: sprite.frame.w.into(),
+                        height: sprite.frame.h.into(),
+                },
+            );
+        });
+*/
+
+        self.rhb.as_ref().unwrap().draw(renderer);
+    }//^-- draw()
+
+```
+
+then `sheet` and so on
+
+```rust
+pub struct WalkTheDog {
+    //image: Option<HtmlImageElement>,
+    //sheet: Option<Sheet>,
+    frame: u8,
+    position: Point,
+    rhb: Option<RedHatBoy>,
+}
+
+impl WalkTheDog {
+    pub fn new() -> Self {
+        WalkTheDog {
+            //sheet: None,
+            frame: 0,
+            position: Point {x: 0, y: 0},
+            rhb: None,
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    ...
+    fn draw(&self, renderer: &Renderer) {
+        let current_sprite = (self.frame / 3) + 1;
+        let frame_name = format!("Run ({}).png", current_sprite);
+        /*let sprite = self.sheet.as_ref()
+                               .and_then(|sheet| sheet.frames.get(&frame_name))
+                               .expect("Cell not found");
+        */
+        renderer.clear( &Rect {
+            ...
+```
 
 When you're done, WalkTheDog becomes very short, as it should be. 
 As for the arrow keys, you only need to worry about the ArrowRight key, 
