@@ -7,9 +7,12 @@ use web_sys::HtmlImageElement;
 
 use self::red_hat_boy_states::*;
 
+
+
 pub struct WalkTheDog {
     rhb: Option<RedHatBoy>,
 }
+
 
 impl WalkTheDog {
     pub fn new() -> Self {
