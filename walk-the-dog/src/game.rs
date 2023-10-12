@@ -180,10 +180,22 @@ impl RedHatBoyStateMachine {
                 state.update();
                 RedHatBoyStateMachine::Running(state)
             },
+            /*
             RedHatBoyStateMachine::Sliding(mut state) => {
                 state.update();
                 RedHatBoyStateMachine::Sliding(state)
             },
+            */
+            RedHatBoyStateMachine::Sliding(mut state) => {
+                state.update(SLIDING_FRAMES);
+                if state.context().frame >= SLIDING_FRAMES {
+                    RedHatBoyStateMachine::Running(
+                    state.stand())
+                } else {
+                    RedHatBoyStateMachine::Sliding(state)
+                }
+            },
+
         }
     }
 }//^-- impl
