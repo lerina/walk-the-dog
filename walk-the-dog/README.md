@@ -384,9 +384,21 @@ Finally, I think we can all agree that the kind of duplication
 that we have here can be improved. 
 The only difference between the two functions is the frame count. 
 
-So, we have a few things to do:
+---
+
+> So, we have a few things to do:
 
 1. Refactor the duplicated code.
+2. Fix the Law of Demeter violation.
+3. Move RHB on every update .
+4.Ensure that the frame count resets to 0 when transitioning between states.
+5. Start Running on transition.
+6. Start Running on the right arrow.
+7. Delete the original code.
+
+---
+
+#### Refactor the duplicated code.
 The code that updates `context.frame` suffers from a code smell called 
 Feature Envy ( https://bit.ly/3ytptHA ) because the update function is 
 operating over and over again on context. 
@@ -402,23 +414,328 @@ impl RedHatBoyStateMachine {
     fn update(self) -> Self {
         match self {
             RedHatBoyStateMachine::Idle(mut state) => {
-                state.context =
-                state.context.update(IDLE_FRAMES);
+                state.context = state.context.update(IDLE_FRAMES);
                 RedHatBoyStateMachine::Idle(state)
             }
             RedHatBoyStateMachine::Running(mut state) => {
-                state.context = state.context.update(
-                RUNNING_FRAMES);
+                state.context = state.context.update(RUNNING_FRAMES);
                 RedHatBoyStateMachine::Running(state)
             }
         }
     }
 
 }//^-- impl
+```
+
+And now we put the duplicated code in `impl RedHatBoyContext` in a new `update`
+
+```rust
+mod red_hat_boy_states {
+...
+
+    #[derive(Copy, Clone)]
+    pub struct RedHatBoyContext {
+    ...
+    }
+
+    impl RedHatBoyContext {
+        pub fn update(mut self, frame_count: u8) -> Self {
+            if self.frame < frame_count {
+                self.frame += 1;
+            } else {
+                self.frame = 0;
+            }
+            self
+        }
+    }
+```
+RedHatBoyContext now has an update function that increments the frame, 
+looping it back to 0 when the total frame count is reached. 
+
+Note how it works the same way as our transitions, consuming self, 
+and returning a new RedHatBoyContext, although in reality, 
+it's the same instance the entire time.
+
+This gives us the same kind of functional interface that we're using elsewhere. 
+The total frame count changes with each state, so we pass that in as a parameter, 
+using constants for clarity.
 
 
 
+#### Fix the Law of Demeter violation.
 
+Looking at the two arms of each match statement, they are nearly identical, 
+both mutating context in the way we didn't like earlier. 
+
+Now is a good time to address it, which we can do by making the field private 
+on `RedHatBoyState<S>` again, 
+
+```rust
+// filename: src/game.rs
+
+
+    #[derive(Copy, Clone)]
+    pub struct RedHatBoyState<S> {
+        // pub context: RedHatBoyContext,
+        context: RedHatBoyContext,
+        _state: S,
+    }
+```
+and creating new `update` methods on the respective `RedHatBoy` state implementations, as
+shown here:
+
+```rust
+// filename: src/game.rs
+
+mod red_hat_boy_states {
+    ...
+    const IDLE_FRAMES: u8 = 29;
+    const RUNNING_FRAMES: u8 = 23;
+    ....
+    impl RedHatBoyState<Idle> {
+        ....
+        pub fn update(&mut self) {
+            self.context = self.context.update(IDLE_FRAMES);
+        }
+    }
+
+    impl RedHatBoyState<Running> {
+        ...
+        pub fn update(&mut self) {
+            self.context = self.context.update(RUNNING_FRAMES);
+        }
+    }
+}
+
+```
+
+Make sure you move the `RUNNING_FRAMES` and `IDLE_FRAMES` constants 
+into the `red_hat_boy_states` module.
+
+```
+mod red_hat_boy_states {
+    use crate::engine::Point;
+    ...
+    const IDLE_FRAMES: u8 = 29;
+    const RUNNING_FRAMES: u8 = 23;
+
+    ...
+```
+
+`context` is no longer inappropriately public, and each
+individual state handles its own updating. The only difference between them is the
+constant they use, and it's fitting to have that bundled with the implementation
+itself. 
+
+
+We'll need to modify the update method on RedHatBoyStateMachine to call
+this new method on each of the states:
+
+```rust
+// filename: src/game.rs
+
+    impl RedHatBoyStateMachine {
+        ....
+        fn update(self) -> Self {
+            match self {
+                RedHatBoyStateMachine::Idle(mut state) => {
+                    state.update();
+                    RedHatBoyStateMachine::Idle(state)
+                }
+                RedHatBoyStateMachine::Running(mut state) => {
+                    state.update();
+                    RedHatBoyStateMachine::Running(state)
+                }
+            }
+        }
+    }
+```
+
+Each of the arms in update now updates the state, and then returns the state.
+There's some duplication here that's a little suspicious; 
+we'll take another look at that shortly.
+
+
+#### Move RHB on every update
+
+If RHB is going to run in the running state, it needs to respect the velocity. 
+In other words, update animates the frame, but it doesn't move, 
+so let's add that to the `RedHatBoyContext` `update` method:
+
+```rust
+// filename: src/game.rs
+
+    fn update(mut self, frame_count: u8) -> Self {
+        ...
+        self.position.x += self.velocity.x;
+        self.position.y += self.velocity.y;
+        self
+    }
+```
+
+Of course, RHB won't move yet because we aren't changing the velocity. That will
+come soon.
+
+#### Ensure that the frame count resets to 0 when transitioning between states.
+
+There are two categories of changes on the game object that can happen in our state
+machine. 
+- There are changes that happen when the state doesn't change. That's what
+update is and right now those are written in `RedHatBoyStateMachine`. 
+- There are also changes that happen on a transition, and those happen in the transition
+functions that are defined as methods of the type classes.
+
+We already transitioned from `Idle` to `Running` via the `run` method, and we can
+make sure to reset the frame rate on the transition. That's a small change you can
+see here:
+
+```rust
+// filename: src/game.rs
+
+impl RedHatBoyContext {
+    ...
+    fn reset_frame(mut self) -> Self {
+        self.frame = 0;
+        
+        self
+    }
+}
+```
+
+```rust
+// filename: src/game.rs
+
+impl RedHatBoyState<Idle> {
+    ....
+    pub fn run(self) -> RedHatBoyState<Running> {
+        RedHatBoyState {
+            //context: self.context,
+           context: self.context.reset_frame(),
+           _state: Running {},
+        }
+    }
+}
+```
+
+
+`RedHatBoyContext` has grown a function called `reset_frame`, which resets its
+frame count to 0 and returns itself. By returning itself, we can chain calls together,
+which will come in handy shortly. 
+The run method has also evolved to call `reset_frame()` on `RedHatBoyContext` 
+and use that new version of context in the new `RedHatBoyState` struct.
+
+
+#### Start Running on transition.
+
+Now that we have prevented crashes by restarting animations on transitions, let's
+start running forward on a transition. This is going to be very short:
+
+```rust
+// filename: src/game.rs
+
+mod red_hat_boy_states {
+    ....
+    const RUNNING_SPEED: i16 = 3;
+
+    ...
+    impl RedHatBoyContext {
+        ...
+        fn run_right(mut self) -> Self {
+            self.velocity.x += RUNNING_SPEED;
+            
+            self
+        }
+    }
+
+
+```
+
+and also
+
+```rust
+// filename: src/game.rs
+
+mod red_hat_boy_states {
+    impl RedHatBoyState<Idle> {
+        pub fn run(self) -> RedHatBoyState<Running> {
+            RedHatBoyState {
+                //context: self.context.reset_frame(),
+                context: self.context.reset_frame().run_right(),
+                _state: Running {},
+            }
+        }
+    }
+
+```
+We've sprouted another method on `RedHatBoyContext` called `run_right`,
+which simply adds forward speed to the velocity. 
+Meanwhile, we've chained a call (see!) to `run_right` in the transition. 
+Don't forget to add the RUNNING_SPEED constant to the module.
+
+#### Start Running on the right arrow.
+
+Finally, we actually need to call this event when the `ArrowRight` button is pressed.
+In `update` for `impl Game for WalkTheDog`:
+
+```rust
+    impl Game for WalkTheDog {
+        ...
+        fn update(&mut self, keystate: &KeyState) {
+            let mut velocity = Point { x: 0, y: 0 };
+            ...
+            //if keystate.is_pressed("ArrowRight") { velocity.x += 3; }
+            if keystate.is_pressed("ArrowRight") {
+                velocity.x += 3;
+                self.rhb.as_mut().unwrap().run_right();
+            }   
+        }
+
+```
+
+
+And the `run_right` method
+
+```rust
+// filename: src/game.rs
+
+impl RedHatBoy {
+    ...
+    fn update(&mut self) {
+        self.state_machine = self.state_machine.update();
+    }
+
+    fn run_right(&mut self) {
+        self.state = self.state.transition(Event::Run);
+    }
+}
+```
+This will now start our RHB running, so much so that he'll run right off the screen!
+
+
+We don't need to move backward in our actual game, nor stop, so we won't.
+
+
+#### Delete the original code.
+
+Now that the new and improved RHB is moving, it's time to get rid of all the
+references in WalkTheDog to the sheet, the element, the frame...basically anything
+that isn't the RedHatBoy struct :
+
+```rust
+// filename: src/game.rs
+
+pub struct WalkTheDog {
+    rhb: Option<RedHatBoy>,
+}
+```
+
+Rather than boring you with endless deletes, 
+I'll simply say you can delete all the fields that aren't rhb 
+and follow the compiler errors to delete the rest of the code.
+
+When you're done, WalkTheDog becomes very short, as it should be. 
+As for the arrow keys, you only need to worry about the ArrowRight key, 
+and moving to the right.
 
 
 
