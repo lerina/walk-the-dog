@@ -40,6 +40,30 @@ impl RedHatBoy {
         self.state_machine = self.state_machine.update();
     }
 
+
+    fn draw_rect(&self, renderer: &Renderer){
+        let frame_name = format!(
+            "{} ({}).png",
+            self.state_machine.frame_name(),
+            (self.state_machine.context().frame / 3) + 1
+        );
+        let sprite = self
+            .sprite_sheet
+            .frames
+            .get(&frame_name)
+            .expect("Cell not found");
+
+        renderer.draw_rect(
+            &Rect {
+                x: (self.state_machine.context().position.x
+                + sprite.sprite_source_size.x as i16).into(),
+                y: (self.state_machine.context().position.y
+                + sprite.sprite_source_size.y as i16).into(),
+                width: sprite.frame.w.into(),
+                height: sprite.frame.h.into(),
+            });   
+    }
+
     fn draw(&self, renderer: &Renderer) {
         let frame_name = format!(
             "{} ({}).png",
@@ -62,8 +86,12 @@ impl RedHatBoy {
                 height: sprite.frame.h.into(),
             },
             &Rect {
-                x: self.state_machine.context().position.x.into(),
-                y: self.state_machine.context().position.y.into(),
+                //x: self.state_machine.context().position.x.into(),
+                //y: self.state_machine.context().position.y.into(),
+                x: (self.state_machine.context().position.x
+                + sprite.sprite_source_size.x as i16).into(),
+                y: (self.state_machine.context().position.y
+                + sprite.sprite_source_size.y as i16).into(),
                 width: sprite.frame.w.into(),
                 height: sprite.frame.h.into(),
             },
@@ -168,7 +196,9 @@ impl From<JumpingEndState> for RedHatBoyStateMachine {
 mod red_hat_boy_states {
     use crate::engine::Point;
 
-    const FLOOR: i16 = 475;
+    //const FLOOR: i16 = 475;
+    const FLOOR: i16 = 479;
+    const STARTING_POINT: i16 = -20;
     const IDLE_FRAMES: u8 = 29;
     const RUNNING_FRAMES: u8 = 23;
     const JUMPING_FRAMES: u8 = 35;
@@ -207,7 +237,7 @@ mod red_hat_boy_states {
             RedHatBoyState {
                 context: RedHatBoyContext {
                     frame: 0,
-                    position: Point { x: 0, y: FLOOR },
+                    position: Point { x: STARTING_POINT, y: FLOOR, },
                     velocity: Point { x: 0, y: 0 },
                 },
                 _state: Idle {},
@@ -431,7 +461,11 @@ impl Game for WalkTheDog {
         if let WalkTheDog::Loaded(walk) = self {
             walk.background.draw(renderer);
             walk.boy.draw(renderer);
+            walk.boy.draw_rect(renderer);
             walk.stone.draw(renderer);
+            walk.stone.draw_rect(renderer);
+
+
         }
     }
 }

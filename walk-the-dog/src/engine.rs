@@ -31,9 +31,17 @@ pub struct SheetRect {
     pub h: i16,
 }
 
+/*
 #[derive(Deserialize, Clone)]
 pub struct Cell {
     pub frame: SheetRect,
+}
+*/
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Cell {
+    pub frame: SheetRect,
+    pub sprite_source_size: SheetRect,
 }
 
 #[derive(Deserialize, Clone)]
@@ -53,7 +61,14 @@ impl Image {
     }
 
     pub fn draw(&self, renderer: &Renderer) {
-        renderer.draw_entire_image(&self.element, &self.position)
+        renderer.draw_entire_image(&self.element, &self.position);
+    }
+    pub fn draw_rect(&self, renderer: &Renderer) {
+        renderer.draw_rect( &Rect{ x:self.position.x.into(), 
+                                   y: self.position.y.into(), 
+                                   width: self.element.width() as f32, 
+                                   height: self.element.height() as f32}
+        );
     }
 }
 
@@ -98,7 +113,19 @@ impl Renderer {
                                                 position.y.into())
             .expect("Drawing is throwing exceptions! Unrecoverable error.");
     }//^-- draw_entire_image
-
+    
+    //for debuging
+    pub fn draw_rect(&self, bounding_box: &Rect) {
+        self.context.set_stroke_style(&JsValue::from_str("#FF0000"));
+        self.context.begin_path();
+        self.context.rect(
+            bounding_box.x.into(),
+            bounding_box.y.into(),
+            bounding_box.width.into(),
+            bounding_box.height.into(),
+        );
+        self.context.stroke();
+    }
 }//^-- impl Renderer
 
 pub async fn load_image(source: &str) -> Result<HtmlImageElement> {
