@@ -17,6 +17,7 @@ TODO:
 4. Modify WalkTheDog enum to load 
 5. Add a Walk struct
 6. Initialize Game with the Walk struct
+7. Draw background
 
 #### Create an Image struct.
 
@@ -235,9 +236,114 @@ update , you can also fix a similar error in draw , like so:
 impl Game for WalkTheDog {
     ...
     fn draw(&self, renderer: &Renderer) {
+        renderer.clear(&Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 600.0,
+            height: 600.0,
+        });
+
         if let WalkTheDog::Loaded(walk) = self {
             walk.boy.draw(renderer);
         }
+    }
     ...
 ```
+
+#### Draw background
+
+Next, go ahead and draw the background for our game. Drawing the background
+is a matter of using our new draw function, so let's add that right before the walk.
+boy.draw function call, as shown here:
+
+```rust
+// src/game.rs
+
+impl Game for WalkTheDog {
+    ...
+    fn draw(&self, renderer: &Renderer) {
+    ...
+        if let WalkTheDog::Loaded(walk) = self {
+            walk.background.draw(renderer);
+            walk.boy.draw(renderer);
+        }
+...
+```
+
+After doing that, you should see RHB standing in front of the background.
+
+## Adding an obstacle
+
+Our new Image object means we won't need much code to add an obstacle
+
+Put Stone.png in your pix resources folder, then can add it to
+`Walk` in the same way you added `Background`, like so:
+
+```rust
+// src/game.rs
+
+struct Walk {
+    boy: RedHatBoy,
+    background: Image,
+    stone: Image,
+}
+```
+
+That will start causing compiler errors again because Walk is created without
+a stone. 
+
+In initialize , go ahead and load the stone, just as you loaded the background,
+as shown here:
+
+```rust
+// src/game.rs
+
+impl Game for WalkTheDog {
+    async fn initialize(&mut self) -> Result<Box<dyn Game>> {
+        ...
+        let background = engine::load_image("../resources/pix/BG.png").await?;
+        let stone = engine::load_image("../resources/pix/Stone.png").await?;
+        ...
+```
+
+Then, you need to take the stone that we just loaded and add it to Walk . We'll make
+sure the stone is on the ground by taking the FLOOR value ( 600 ) and subtracting
+the height of the stone image, which happens to be 54 pixels. If we position the
+stone at a y position of 546 , it should be sitting right on the ground. Here's the
+update for creating Walk :       
+
+
+```rust
+// src/game.rs
+
+impl Game for WalkTheDog { 
+    async fn initialize(&mut self) -> Result<Box<dyn Game>> {
+        ...
+           let walk = Walk {   boy: rhb, 
+                               background: Image::new(background, Point {x:0, y:0}),
+                               stone: Image::new(stone, Point { x: 150, y: 546 })
+                            };
+            Ok(Box::new(WalkTheDog::Loaded(walk)))
+        
+
+```
+
+The stone is 150 pixels to the right, so it will be in front of RHB. 
+Finally, draw the stone using the `draw` method. 
+That addition is as follows:
+
+
+```rust
+// src/game.rs
+
+impl Game for WalkTheDog {
+    ...
+    fn draw(&self, renderer: &Renderer) {
+    if let WalkTheDog::Loaded(walk) = self {
+        ...
+        if let WalkTheDog::Loaded(walk) = self {
+            walk.background.draw(renderer);
+            walk.boy.draw(renderer);
+            walk.stone.draw(renderer);
+        }
 
