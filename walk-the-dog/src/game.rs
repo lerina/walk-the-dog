@@ -6,7 +6,7 @@ use web_sys::HtmlImageElement;
 use self::red_hat_boy_states::*;
 use crate::{
     browser,
-    engine::{self, Game, KeyState, Rect, Renderer, Sheet, Image, Point,},
+    engine::{self, Game, KeyState, Rect, Renderer, Sheet, Image, Point, Cell},
 };
 
 pub struct RedHatBoy {
@@ -40,7 +40,48 @@ impl RedHatBoy {
         self.state_machine = self.state_machine.update();
     }
 
+    fn frame_name(&self) -> String {
+        format!(
+            "{} ({}).png",
+            self.state_machine.frame_name(),
+            (self.state_machine.context().frame / 3) + 1
+        )
+    }
 
+    fn current_sprite(&self) -> Option<&Cell> {
+        self
+            .sprite_sheet
+            .frames
+            .get(&self.frame_name())
+            //.expect("Cell not found")
+    }
+
+    fn bounding_box(&self) -> Rect {
+        /*        
+        let frame_name = format!(
+            "{} ({}).png",
+            self.state_machine.frame_name(),
+            (self.state_machine.context().frame / 3) + 1
+        );
+        
+        let sprite = self
+            .sprite_sheet
+            .frames
+            .get(&frame_name)
+            .expect("Cell not found");
+        */
+        let sprite = self.current_sprite().expect("Cell not found");
+
+        Rect {
+                x: (self.state_machine.context().position.x
+                + sprite.sprite_source_size.x as i16).into(),
+                y: (self.state_machine.context().position.y
+                + sprite.sprite_source_size.y as i16).into(),
+                width: sprite.frame.w.into(),
+                height: sprite.frame.h.into(),
+        }
+    }
+    /*
     fn draw_rect(&self, renderer: &Renderer){
         let frame_name = format!(
             "{} ({}).png",
@@ -62,6 +103,11 @@ impl RedHatBoy {
                 width: sprite.frame.w.into(),
                 height: sprite.frame.h.into(),
             });   
+    }
+    */
+
+    fn draw_rect(&self, renderer: &Renderer){
+        renderer.draw_rect(&self.bounding_box());
     }
 
     fn draw(&self, renderer: &Renderer) {
@@ -85,6 +131,7 @@ impl RedHatBoy {
                 width: sprite.frame.w.into(),
                 height: sprite.frame.h.into(),
             },
+            /*
             &Rect {
                 //x: self.state_machine.context().position.x.into(),
                 //y: self.state_machine.context().position.y.into(),
@@ -95,6 +142,8 @@ impl RedHatBoy {
                 width: sprite.frame.w.into(),
                 height: sprite.frame.h.into(),
             },
+            */
+            &self.bounding_box(),
         );
     }
 }
