@@ -23,6 +23,15 @@ pub struct Rect {
     pub height: f32,
 }
 
+impl Rect {
+    pub fn intersects(&self, rect: &Rect) -> bool {
+        self.x < (rect.x + rect.width)
+        && self.x + self.width > rect.x
+        && self.y < (rect.y + rect.height)
+        && self.y + self.height > rect.y
+    }
+}
+
 #[derive(Deserialize, Clone)]
 pub struct SheetRect {
     pub x: i16,
