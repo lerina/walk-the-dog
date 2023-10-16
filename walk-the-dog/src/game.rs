@@ -9,6 +9,71 @@ use crate::{
     engine::{self, Game, KeyState, Rect, Renderer, Sheet, Image, Point, Cell},
 };
 
+
+struct Platform {
+    sheet: Sheet,
+    image: HtmlImageElement,
+    position: Point,
+}
+
+impl Platform {
+    fn new(sheet: Sheet, image: HtmlImageElement, position: Point) -> Self {
+        Platform {
+            sheet,
+            image,
+            position,
+        }
+    }//^-- new
+
+
+    fn bounding_box(&self) ->Rect {
+        let platform = self
+                        .sheet
+                        .frames
+                        .get("13.png")
+                        .expect("13.png does not exist");
+        
+        Rect {
+            x: self.position.x.into(),
+            y: self.position.y.into(),
+            width: (platform.frame.w * 3).into(),
+            height: platform.frame.h.into(),
+        }
+    }//^-- bounding_box
+
+
+
+    fn draw(&self, renderer: &Renderer) {
+        let platform = self
+                        .sheet
+                        .frames
+                        .get("13.png")
+                        .expect("13.png does not exist");
+        
+        renderer.draw_image(&self.image,
+                                &Rect {
+                                    x: platform.frame.x.into(),
+                                    y: platform.frame.y.into(),
+                                    width: (platform.frame.w * 3).into(),
+                                    height: platform.frame.h.into(),
+                                },
+/*                                &Rect {
+                                    x: self.position.x.into(),
+                                    y: self.position.y.into(),
+                                    width: (platform.frame.w * 3).into(),
+                                    height: platform.frame.h.into(),
+                                },
+*/
+                               &self.bounding_box(),
+                            );
+    }//^-- draw
+
+    fn draw_rect(&self, renderer: &Renderer){
+        renderer.draw_rect(&self.bounding_box());
+    }
+}
+
+
 pub struct RedHatBoy {
     state_machine: RedHatBoyStateMachine,
     sprite_sheet: Sheet,
@@ -560,6 +625,7 @@ pub struct Walk {
     boy: RedHatBoy,
     background: Image,
     stone: Image,
+    platform: Platform,
 }
 
 pub enum WalkTheDog {
@@ -582,9 +648,16 @@ impl Game for WalkTheDog {
                 let rhb = RedHatBoy::new(sheet, engine::load_image("../resources/pix/rhb.png").await?);
                 let background = engine::load_image("../resources/pix/BG.png").await?;
                 let stone = engine::load_image("../resources/pix/Stone.png").await?;
+                let platform_sheet = browser::fetch_json("../resources/pix/tiles.json").await?;
+                let platform = Platform::new( platform_sheet.into_serde::<Sheet>()?,
+                                              engine::load_image("../resources/pix/tiles.png").await?,
+                                              Point { x: 200, y: 400 },
+                               );
+
                 let walk = Walk {   boy: rhb, 
                                     background: Image::new(background, Point {x:0, y:0}),
-                                    stone: Image::new(stone, Point { x: 150, y: 546 })
+                                    stone: Image::new(stone, Point { x: 150, y: 546 }),
+                                    platform: platform,
                                 };
                 Ok(Box::new(WalkTheDog::Loaded(walk)))
             },
@@ -630,6 +703,8 @@ impl Game for WalkTheDog {
             walk.boy.draw_rect(renderer);
             walk.stone.draw(renderer);
             walk.stone.draw_rect(renderer);
+            walk.platform.draw(renderer);
+            walk.platform.draw_rect(renderer);
 
 
         }
