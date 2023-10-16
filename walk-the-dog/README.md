@@ -363,7 +363,6 @@ creating it will mean updating our state machine.
 The `KnockOut` event will cause a transition into the `Falling` state, which will
 then transition into the `KnockedOut` state when the `Falling` animation has completed.
 
-What are we waiting for? Let's knock out RHB!
 
 #### A KnockOut event
 
@@ -475,6 +474,7 @@ mod red_hat_boy_states {
         ...
     }
 ```
+
 The transition properly moves into the Dead animation, but it doesn't stop RHB's forward
 motion. Let's change the transition to stop RedHatBoy :
 
@@ -494,6 +494,8 @@ mod red_hat_boy_states {
             }
         }
 ```
+
+Then the `stop` method
 
 ```rust
 // src/game.rs
@@ -632,10 +634,11 @@ so, transition to the `KnockedOut` state instead of staying in `Falling`.
 ```
 
 4. Create an enum to handle both end states of the update method in
-`RedHatBoyState<Falling>`, as well as the corresponding `From trait`, to
-convert from that to the `RedHatBoyStateMachine` -appropriate enum variant.
+`RedHatBoyState<Falling>`, 
 
-```
+```rust
+// src/game.rs
+
 #[derive(Copy, Clone)]
 enum RedHatBoyStateMachine {
     Idle(RedHatBoyState<Idle>),
@@ -644,6 +647,13 @@ enum RedHatBoyStateMachine {
     KnockedOut(RedHatBoyState<KnockedOut>),
 }
 ...
+```
+
+as well as the corresponding `From trait`, to
+convert from that to the `RedHatBoyStateMachine` -appropriate enum variant.
+
+```rust
+// src/game.rs
 impl From<RedHatBoyState<Falling>> for RedHatBoyStateMachine {
     fn from(state: RedHatBoyState<Falling>) -> Self {
         RedHatBoyStateMachine::Falling(state)
@@ -688,4 +698,8 @@ impl RedHatBoyStateMachine {
             (RedHatBoyStateMachine::Jumping(state), Event::KnockOut) => state.knock_out().into(),
             (RedHatBoyStateMachine::Sliding(state), Event::KnockOut) => state.knock_out().into(),
 ```
+
+
+
+
 
