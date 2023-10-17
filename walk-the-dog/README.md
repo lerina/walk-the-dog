@@ -660,6 +660,109 @@ It turns out there is a fairly sneaky bug with the way we are handling gravity, 
 call the "terminal velocity" bug, and we can address that next.
 
 
+**Terminal velocity**
+
+We add 1 to the gravity on every update until the player jumps again. 
+
+
+```rust
+// src/game.rs
+
+mod red_hat_boy_states {
+...
+
+    const GRAVITY: i16 = 1;
+
+    ...
+
+    impl RedHatBoyContext {
+        pub fn update(mut self, frame_count: u8) -> Self {
+            self.velocity.y += GRAVITY;
+
+...
+
+```
+
+This means that, eventually, the gravity gets so large that the player is pulled completely
+below the platform on an update, and he actually stops intersecting it. 
+Our platform is currently at 400. When the player lands on it, he is at 279, 
+the platform's y-axis minus the player's height. 
+
+On the first frame, we pull him down by 1 for gravity, 
+check whether that intersects the platform (it does), and land. 
+On the next frame, we pull him down by 2, the next by 3, and so on. 
+Eventually, we actually pull him completely beneath the platform, 
+he does not intersect it, and boom – he's suddenly below the platform. 
+
+We need to fix that by giving gravity a terminal velocity.
+
+In the real-world, terminal velocity is the fastest attainable speed by an object as it falls
+because of the drag of the air around it (see https://go.nasa.gov/3roAWGL for
+more information). We aren't going to calculate RHB's true terminal velocity, as there's no
+air in his world, but we can use the very scientific method of picking a number and seeing
+whether it works. We'll set a maximum positive y velocity of RHB to 20 and clamp his
+updates to that. That will live in the RedHatBoyContext update method, where we
+are already modifying y for gravity. The code for that is shown here:
+
+```rust
+// src/game.rs
+
+mod red_hat_boy_states {
+    ...
+    const GRAVITY: i16 = 1;
+    const TERMINAL_VELOCITY: i16 = 20;
+
+    impl RedHatBoyContext {
+        pub fn update(mut self, frame_count: u8) -> Self {
+            //self.velocity.y += GRAVITY;
+            
+            if self.velocity.y < TERMINAL_VELOCITY {
+                self.velocity.y += GRAVITY;
+            }
+
+            if self.frame < frame_count {
+                ...
+```
+
+Clamping the velocity at 20 fixes our issue with falling through the platform, 
+and now RHB falls off the platform at the end as he should. 
+
+However, if you try to slide (push the arrow down), 
+you'll see that RHB falls right through the platform. 
+That's because the Sliding state doesn't respond to the Land event. 
+
+You can fix that in the exact same way you fixed Running, which is an exercise for you. 
+
+One hint – when you stay in the same state, you don't call `reset_frame`!
+
+```rust
+    impl RedHatBoyState<Sliding> {
+
+        pub fn land_on(self, position: f32) -> RedHatBoyState<Sliding> {
+            RedHatBoyState {
+                context: self.context.set_on(position as i16),
+                _state: Sliding {},
+            }
+        }
+```
+and 
+
+```rust
+// src/game.rs
+
+impl RedHatBoyStateMachine {
+    fn transition(self, event: Event) -> Self {
+        match (self, event) {
+            ...
+            (RedHatBoyStateMachine::Sliding(state), Event::Land(position)) => state.land_on(position).into()
+...
+```
+           
+
+That's almost the end of it, but there are two more things to take care of – crashing into
+the bottom of the platform and transparency in the bounding boxes.
+
+
 --------------
 
 ```rust

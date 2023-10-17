@@ -181,19 +181,23 @@ pub enum Event {
 impl RedHatBoyStateMachine {
     fn transition(self, event: Event) -> Self {
         match (self, event) {
-            (RedHatBoyStateMachine::Idle(state), Event::Run) => state.run().into(),
+            (RedHatBoyStateMachine::Idle(state),    Event::Run) => state.run().into(),
             (RedHatBoyStateMachine::Running(state), Event::Jump) => state.jump().into(),
             (RedHatBoyStateMachine::Running(state), Event::Slide) => state.slide().into(),
-            (RedHatBoyStateMachine::Idle(state), Event::Update) => state.update().into(),
-            (RedHatBoyStateMachine::Running(state), Event::Update)   => state.update().into(),
-            (RedHatBoyStateMachine::Jumping(state), Event::Update)   => state.update().into(),
-            (RedHatBoyStateMachine::Sliding(state), Event::Update)   => state.update().into(),
-            (RedHatBoyStateMachine::Falling(state), Event::Update)   => state.update().into(),
+
+            (RedHatBoyStateMachine::Idle(state),    Event::Update) => state.update().into(),
+            (RedHatBoyStateMachine::Running(state), Event::Update) => state.update().into(),
+            (RedHatBoyStateMachine::Jumping(state), Event::Update) => state.update().into(),
+            (RedHatBoyStateMachine::Sliding(state), Event::Update) => state.update().into(),
+            (RedHatBoyStateMachine::Falling(state), Event::Update) => state.update().into(),
+
             (RedHatBoyStateMachine::Running(state), Event::KnockOut) => state.knock_out().into(),
             (RedHatBoyStateMachine::Jumping(state), Event::KnockOut) => state.knock_out().into(),
             (RedHatBoyStateMachine::Sliding(state), Event::KnockOut) => state.knock_out().into(),
+
             (RedHatBoyStateMachine::Jumping(state), Event::Land(position)) => state.land_on(position).into(),
             (RedHatBoyStateMachine::Running(state), Event::Land(position)) => state.land_on(position).into(),
+            (RedHatBoyStateMachine::Sliding(state), Event::Land(position)) => state.land_on(position).into()
             _ => self,
         }
     }
@@ -311,6 +315,7 @@ mod red_hat_boy_states {
     const RUNNING_SPEED: i16 = 3;    
     const JUMP_SPEED: i16 = -25;
     const GRAVITY: i16 = 1;
+    const TERMINAL_VELOCITY: i16 = 20;
 
 
 
@@ -539,7 +544,10 @@ mod red_hat_boy_states {
 
     impl RedHatBoyContext {
         pub fn update(mut self, frame_count: u8) -> Self {
-            self.velocity.y += GRAVITY;
+            //self.velocity.y += GRAVITY;
+            if self.velocity.y < TERMINAL_VELOCITY {
+                self.velocity.y += GRAVITY;
+            }
 
             if self.frame < frame_count {
                 self.frame += 1;
