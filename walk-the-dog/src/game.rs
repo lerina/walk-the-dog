@@ -27,7 +27,7 @@ impl Platform {
         }
     }//^-- new
 
-    fn bounding_box(&self) ->Rect {
+    fn destination_box(&self) ->Rect {
         let platform = self
                         .sheet
                         .frames
@@ -40,9 +40,19 @@ impl Platform {
             width: (platform.frame.w * 3).into(),
             height: platform.frame.h.into(),
         }
-    }//^-- bounding_box
+    }//^-- destination_box
 
-
+    fn bounding_box(&self) -> Rect {
+        const X_OFFSET: f32 = 18.0;
+        const Y_OFFSET: f32 = 14.0;
+        const WIDTH_OFFSET: f32 = 28.0;
+        let mut bounding_box = self.destination_box();
+        bounding_box.x += X_OFFSET;
+        bounding_box.width -= WIDTH_OFFSET;
+        bounding_box.y += Y_OFFSET;
+        bounding_box.height -= Y_OFFSET;
+        bounding_box
+    }
 
     fn draw(&self, renderer: &Renderer) {
         let platform = self
@@ -114,7 +124,7 @@ impl RedHatBoy {
             .get(&self.frame_name())
     }
 
-    fn bounding_box(&self) -> Rect {
+    fn destination_box(&self) -> Rect {
 
         let sprite = self.current_sprite().expect("Cell not found");
 
@@ -126,6 +136,18 @@ impl RedHatBoy {
                 width: sprite.frame.w.into(),
                 height: sprite.frame.h.into(),
         }
+    }
+
+    fn bounding_box(&self) -> Rect {
+        const X_OFFSET: f32 = 18.0;
+        const Y_OFFSET: f32 = 14.0;
+        const WIDTH_OFFSET: f32 = 28.0;
+        let mut bounding_box = self.destination_box();
+        bounding_box.x += X_OFFSET;
+        bounding_box.width -= WIDTH_OFFSET;
+        bounding_box.y += Y_OFFSET;
+        bounding_box.height -= Y_OFFSET;
+        bounding_box
     }
 
     fn draw_rect(&self, renderer: &Renderer){
@@ -157,6 +179,13 @@ impl RedHatBoy {
         self.state_machine = self.state_machine.transition(Event::Land(position));
     }
 
+    fn pos_y(&self) -> i16 {
+        self.state_machine.context().position.y
+    }
+
+    fn velocity_y(&self) -> i16 {
+        self.state_machine.context().velocity.y
+    }
 }//^-- impl RedHatBoy 
 
 #[derive(Copy, Clone)]
@@ -197,7 +226,7 @@ impl RedHatBoyStateMachine {
 
             (RedHatBoyStateMachine::Jumping(state), Event::Land(position)) => state.land_on(position).into(),
             (RedHatBoyStateMachine::Running(state), Event::Land(position)) => state.land_on(position).into(),
-            (RedHatBoyStateMachine::Sliding(state), Event::Land(position)) => state.land_on(position).into()
+            (RedHatBoyStateMachine::Sliding(state), Event::Land(position)) => state.land_on(position).into(),
             _ => self,
         }
     }
@@ -539,7 +568,7 @@ mod red_hat_boy_states {
     pub struct RedHatBoyContext {
         pub frame: u8,
         pub position: Point,
-        velocity: Point,
+        pub velocity: Point,
     }
 
     impl RedHatBoyContext {
@@ -656,16 +685,20 @@ impl Game for WalkTheDog {
 
             // land
             if walk.boy
-                   .bounding_box()
-                   .intersects(&walk.platform.bounding_box())
+                   .destination_box()
+                   .intersects(&walk.platform.destination_box())
             {
-                //walk.boy.land();
-                walk.boy.land_on(walk.platform.bounding_box().y);
+                //walk.boy.land_on(walk.platform.destination_box().y);
+                if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
+                    walk.boy.land_on(walk.platform.destination_box().y);
+                } else {
+                    walk.boy.knock_out();
+                }
             }
 
             // knock_out
             if walk.boy
-                   .bounding_box()
+                   .destination_box()
                    .intersects(walk.stone.bounding_box())
             {
                 walk.boy.knock_out();
