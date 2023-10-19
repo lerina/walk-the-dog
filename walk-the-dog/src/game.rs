@@ -41,7 +41,7 @@ impl Platform {
             height: platform.frame.h.into(),
         }
     }//^-- destination_box
-
+/*
     fn bounding_box(&self) -> Rect {
         const X_OFFSET: f32 = 18.0;
         const Y_OFFSET: f32 = 14.0;
@@ -52,8 +52,36 @@ impl Platform {
         bounding_box.y += Y_OFFSET;
         bounding_box.height -= Y_OFFSET;
         bounding_box
-    }
+    }*/
+    // fn bounding_box(&self) -> Rect {
+    fn bounding_boxes(&self) -> Vec<Rect> {
+        const X_OFFSET: f32 = 60.0;
+        const END_HEIGHT: f32 = 54.0;
+        let destination_box = self.destination_box();
 
+        let bounding_box_one = Rect {
+            x: destination_box.x,
+            y: destination_box.y,
+            width: X_OFFSET,
+            height: END_HEIGHT,
+        };
+
+        let bounding_box_two = Rect {
+            x: destination_box.x + X_OFFSET,
+            y: destination_box.y,
+            width: destination_box.width - (X_OFFSET * 2.0),
+            height: destination_box.height,
+        };
+
+        let bounding_box_three = Rect {
+            x: destination_box.x + destination_box.width - X_OFFSET,
+            y: destination_box.y,
+            width: X_OFFSET,
+            height: END_HEIGHT,
+        };
+
+        vec![bounding_box_one, bounding_box_two, bounding_box_three]
+}//^-- fn bounding_boxes
     fn draw(&self, renderer: &Renderer) {
         let platform = self
                         .sheet
@@ -68,12 +96,14 @@ impl Platform {
                                  width: (platform.frame.w * 3).into(),
                                  height: platform.frame.h.into(),
                              },
-                             &self.bounding_box(),
+                             &self.destination_box(), //&self.bounding_box(),
                            );
     }//^-- draw
 
     fn draw_rect(&self, renderer: &Renderer){
-        renderer.draw_rect(&self.bounding_box());
+        for bounding_box in self.bounding_boxes() {
+            renderer.draw_rect(&bounding_box);
+        }
     }
 }
 
@@ -124,20 +154,6 @@ impl RedHatBoy {
             .get(&self.frame_name())
     }
 
-    fn destination_box(&self) -> Rect {
-
-        let sprite = self.current_sprite().expect("Cell not found");
-
-        Rect {
-                x: (self.state_machine.context().position.x
-                + sprite.sprite_source_size.x as i16).into(),
-                y: (self.state_machine.context().position.y
-                + sprite.sprite_source_size.y as i16).into(),
-                width: sprite.frame.w.into(),
-                height: sprite.frame.h.into(),
-        }
-    }
-
     fn bounding_box(&self) -> Rect {
         const X_OFFSET: f32 = 18.0;
         const Y_OFFSET: f32 = 14.0;
@@ -149,6 +165,20 @@ impl RedHatBoy {
         bounding_box.height -= Y_OFFSET;
         bounding_box
     }
+
+    fn destination_box(&self) -> Rect {
+        let sprite = self.current_sprite().expect("Cell not found");
+
+        Rect {
+            x: (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16)
+                .into(),
+            y: (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16)
+                .into(),
+            width: sprite.frame.w.into(),
+            height: sprite.frame.h.into(),
+        }
+    }
+
 
     fn draw_rect(&self, renderer: &Renderer){
         renderer.draw_rect(&self.bounding_box());
@@ -166,7 +196,7 @@ impl RedHatBoy {
                 width: sprite.frame.w.into(),
                 height: sprite.frame.h.into(),
             },
-            &self.bounding_box(),
+            &self.destination_box(), //&self.bounding_box(),
         );
     }//^-- fn draw
 
@@ -683,10 +713,10 @@ impl Game for WalkTheDog {
 
             walk.boy.update();
 
-            // land
+/*            // land
             if walk.boy
                    .destination_box()
-                   .intersects(&walk.platform.destination_box())
+                   .intersects(&walk.platform.bounding_box())
             {
                 //walk.boy.land_on(walk.platform.destination_box().y);
                 if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
@@ -695,7 +725,17 @@ impl Game for WalkTheDog {
                     walk.boy.knock_out();
                 }
             }
+*/
 
+            for bounding_box in &walk.platform.bounding_boxes() {
+                if walk.boy.bounding_box().intersects(bounding_box) {
+                    if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
+                        walk.boy.land_on(bounding_box.y);
+                    } else {
+                        walk.boy.knock_out();
+                    }
+                }
+            }
             // knock_out
             if walk.boy
                    .destination_box()

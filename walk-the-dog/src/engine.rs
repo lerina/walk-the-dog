@@ -62,25 +62,26 @@ pub struct Sheet {
 pub struct Image {
     element: HtmlImageElement,
     position: Point,
-    destination_box: Rect,
+    bounding_box: Rect,
 }
 
 impl Image {
     pub fn new(element: HtmlImageElement, position: Point) -> Self {
-        let destination_box = Rect {   x: position.x.into(),
-                                    y: position.y.into(),
-                                    width: element.width() as f32,
-                                    height: element.height() as f32,
-                            };
-        //Self { element, position }
-        Self {  element,
-                position,
-                destination_box,
+        let bounding_box = Rect {
+            x: position.x.into(),
+            y: position.y.into(),
+            width: element.width() as f32,
+            height: element.height() as f32,
+        };
+        Self {
+            element,
+            position,
+            bounding_box,
         }
     }
 
-    pub fn bounding_box(&self) ->&Rect {
-        &self.destination_box
+    pub fn bounding_box(&self) -> &Rect {
+        &self.bounding_box
     }
 
     pub fn draw(&self, renderer: &Renderer) {
