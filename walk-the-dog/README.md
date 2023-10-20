@@ -204,6 +204,217 @@ This small change will mean that RHB can now walk off the edge of the world:
 However, we don't want this, so let's learn how to use two tiling backgrounds to simulate
 an infinite one.
 
+### An infinite background
+
+To get an infinite background, we'll need two background images instead of one.
+We'll start by storing background as an array instead of just one Image in Walk , as
+shown here:
+
+```rust
+// src/game.rs
+
+struct Walk {
+    boy: RedHatBoy,
+    //background: Image,
+    backgrounds: [Image; 2],
+    stone: Image,
+    platform: Platform,
+}
+```
+
+This will cause several compiler errors because `backgrounds` doesn't exist; 
+even if it did, the code expects it to be an Image array. 
+Fortunately, the errors largely make sense and we can figure out what needs to be done. 
+Moving once again to initialize in the Game implementation, 
+let's set up an array of backgrounds instead of just one when initializing `Walk`, 
+
+as shown here:
+
+
+```rust
+// src/game.rs
+
+async fn initialize(&self) -> Result<Box<dyn Game>> {
+        match self {
+            WalkTheDog::Loading => {
+                ...
+                
+                let background_width = background.width() as i16;
+                let backgrounds = [ Image::new( background.clone(), Point { x: 0, y: 0 }),
+                                    Image::new( background, Point { x: background_width, y: 0,},),
+                                  ];
+
+                let walk = Walk {   boy: rhb, 
+                                    backgrounds: backgrounds,
+                                    stone: Image::new(stone, Point { x: 150, y: 546 }),
+                                    platform: platform,
+                                };
+                Ok(Box::new(WalkTheDog::Loaded(walk)))
+                    ...
+```
+
+There's a little more going on here compared to our previous changes, so let's go through
+this code in more detail. 
+
+The first thing we do is get the `width` property of `background`.
+This is the temporary variable that we created when we loaded `HtmlImageElement`,
+not the background property that's attached to `Walk` that we have been using. 
+We have done this to prevent a `borrow-after-move` error during the initialization of Walk. 
+
+Then. we made `Walk` take an array of `Image` objects, making sure to clone the background
+property the first time we create it. 
+
+Finally, we made sure to position the second `Image` at `background_width` so that 
+it will be lined up to the right of the first background, off screen.
+
+However, we still aren't done with compiler errors. This is because the background is
+being updated and drawn. We'll make the simplest changes we can so that we can start
+compiling and running again. 
+First, replace the `move_horizontally` code we just wrote in the `update` function with the following code, 
+which `loops` through all the backgrounds and moves them:
+
+
+
+```rust
+// src/game.rs
+
+fn update(&mut self, keystate: &KeyState) {
+    if let WalkTheDog::Loaded(walk) = self {
+        ...
+        walk.platform.position.x += walk.velocity();
+        walk.stone.move_horizontally(walk.velocity());
+        
+        // walk.background.move_horizontally(walk.velocity());
+        let velocity = walk.velocity();
+        walk.backgrounds.iter_mut().for_each(|background| {
+            background.move_horizontally(velocity);
+        });
+
+```
+
+Make sure you use `iter_mut` so that background is mutable. 
+Note that you'll need to bind `walk.velocity()` to a temporary variable; 
+otherwise, you'll get a compiler error saying cannot borrow '*walk' as immutable because it is also
+borrowed as mutable . 
+
+Now, you can update the draw function to draw all the backgrounds:
+
+
+```rust
+// src/game.rs
+
+
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    ...
+
+    fn draw(&self, renderer: &Renderer) {
+        if let WalkTheDog::Loaded(walk) = self {
+            //walk.background.draw(renderer);
+            walk.backgrounds.iter().for_each(|background| {
+                background.draw(renderer);
+                });
+            ...
+            walk.platform.draw_rect(renderer);
+        }//^-- if let
+    }
+```
+
+Here, we are looping through backgrounds again and drawing them, relying on the
+canvas to only show the backgrounds that are on screen. If you play the game while
+running this code, you'll see that `RHB` runs farther but doesn't run infinitely. 
+
+This is because we aren't cycling the backgrounds. 
+
+If you run the game for long enough, you'll see that the game also crashes with a buffer overflow error, 
+but we'll fix that in the next section. 
+
+First, we need to get the backgrounds cycling. 
+We can do that by replacing the loop in the update function with code 
+that explicitly destructures the array, as shown here:
+
+
+```rust
+// src/game.rs
+
+fn update(&mut self, keystate: &KeyState) {
+    if let WalkTheDog::Loaded(walk) = self {
+        ...
+        walk.platform.position.x += walk.velocity();
+        walk.stone.move_horizontally(walk.velocity());
+
+        let velocity = walk.velocity();
+
+        // walk.backgrounds.iter_mut().for_each(|background| {
+        //        background.move_horizontally(velocity);
+        // });
+
+        let [first_background, second_background] = &mut walk.backgrounds;
+        first_background.move_horizontally(velocity);
+        second_background.move_horizontally(velocity);
+
+        if first_background.right() < 0 {
+            first_background.set_x(
+            second_background.right());
+        }
+        if second_background.right() < 0 {
+            second_background.set_x(
+            first_background.right());
+        }
+
+
+```
+
+Here, we start by replacing the for loop with 
+`let [first_background, second_background] = &mut walk.backgrounds;` 
+to get access to both backgrounds.
+Then, we move them both to the left, the same as we did in the loop, 
+and we check whether the right-hand side of the image is negative. 
+This means that the image is off screen, so we can go ahead 
+and move it to the right-hand side of the other background.
+
+If you type this in, it won't compile because `set_x` and `right` don't exist 
+on the Image struct. 
+
+Open the `engine` module again so that we can add those to `Image` , as follows:
+
+
+```rust
+// src/engine.rs
+
+impl Image {
+    ...
+    /*
+    pub fn move_horizontally(&mut self, distance: i16) {
+        self.bounding_box.x += distance as f32;
+        self.position.x += distance;
+    }
+
+    */
+
+    pub fn move_horizontally(&mut self, distance: i16) {
+        self.set_x(self.position.x + distance);
+    }
+    pub fn set_x(&mut self, x: i16) {
+        self.bounding_box.x = x as f32;
+        self.position.x = x;
+    }
+    pub fn right(&self) -> i16 {
+        (self.bounding_box.x + self.bounding_box.width) as i16
+    }
+
+}
+```
+
+Here, we added a `set_x` function that updates `position` and `bounding_box`, 
+just like we did previously, and we had `move_horizontally` call it to avoid duplication.
+
+We also added a `right` function that calculates the right-hand side of `bounding_box`
+based on the current position. With that, `RHB` now runs to the right, forever! 
+
+Well, until the buffer overflows and it crashes. 
+Fortunately, we'll take care of that in the next section.
+
 
 ----------------------
 
