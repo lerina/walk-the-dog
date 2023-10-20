@@ -216,6 +216,10 @@ impl RedHatBoy {
     fn velocity_y(&self) -> i16 {
         self.state_machine.context().velocity.y
     }
+
+    fn walking_speed(&self) -> i16 {
+        self.state_machine.context().velocity.x
+    }
 }//^-- impl RedHatBoy 
 
 #[derive(Copy, Clone)]
@@ -613,8 +617,9 @@ mod red_hat_boy_states {
             } else {
                 self.frame = 0;
             }
-
-            self.position.x += self.velocity.x;
+            
+             // scrolling background instead  
+            //self.position.x += self.velocity.x;
             self.position.y += self.velocity.y;
 
             if self.position.y > FLOOR {
@@ -658,6 +663,12 @@ pub struct Walk {
     background: Image,
     stone: Image,
     platform: Platform,
+}
+
+impl Walk {
+    fn velocity(&self) -> i16 {
+        -self.boy.walking_speed()
+    }
 }
 
 pub enum WalkTheDog {
@@ -713,19 +724,9 @@ impl Game for WalkTheDog {
 
             walk.boy.update();
 
-/*            // land
-            if walk.boy
-                   .destination_box()
-                   .intersects(&walk.platform.bounding_box())
-            {
-                //walk.boy.land_on(walk.platform.destination_box().y);
-                if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
-                    walk.boy.land_on(walk.platform.destination_box().y);
-                } else {
-                    walk.boy.knock_out();
-                }
-            }
-*/
+            walk.platform.position.x += walk.velocity();
+            walk.stone.move_horizontally(walk.velocity());
+            walk.background.move_horizontally(walk.velocity());
 
             for bounding_box in &walk.platform.bounding_boxes() {
                 if walk.boy.bounding_box().intersects(bounding_box) {

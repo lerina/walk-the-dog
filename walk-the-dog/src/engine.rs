@@ -88,17 +88,13 @@ impl Image {
         renderer.draw_entire_image(&self.element, &self.position);
     }
 
-    /*
-    pub fn draw_rect(&self, renderer: &Renderer) {
-        renderer.draw_rect( &Rect{ x:self.position.x.into(), 
-                                   y: self.position.y.into(), 
-                                   width: self.element.width() as f32, 
-                                   height: self.element.height() as f32}
-        );
-    }
-    */
     pub fn draw_rect(&self, renderer: &Renderer) {
         renderer.draw_rect(self.bounding_box());
+    }
+
+    pub fn move_horizontally(&mut self, distance: i16) {
+        self.bounding_box.x += distance as f32;
+        self.position.x += distance;
     }
 }
 

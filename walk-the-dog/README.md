@@ -79,8 +79,134 @@ impl RedHatBoyContext {
 
 ```
 
+With this change, `RHB` will run in place, with nothing moving around him. We are
+keeping velocity as is because that value is going to be used by the rest of the code base. 
+
+For ease of use, we'll add a few methods. 
+First, let's add an accessor to the `RedHatBoy` implementation, as shown here:
+
+
+```rust
+// src/game.rs
+
+impl RedHatBoy {
+    ...
+    fn walking_speed(&self) -> i16 {
+        self.state_machine.context().velocity.x
+    }
+```
+
+This function works similar to several of our other accessors for RedHatBoy, 
+making it easier to get at the context values. 
+
+Next, let's add a new implementation – Walk for the Walk struct:
+
+
+```rust
+// src/game.rs
+
+pub struct Walk {
+    ...
+}
+
+impl Walk {
+    fn velocity(&self) -> i16 {
+        -self.boy.walking_speed()
+    }
+}
+
+```
+
+The `Walk` implementation is only available when the `WalkTheDog` enum is in the
+`Loaded` state and it flips walking_speed of `boy`. While `boy` is moving to the
+right, this means everything else is moving to the left. 
+Now, in the update function of WalkTheDog, we can use that value 
+to move everything else to the left. Right after updating walk.boy, 
+we can update the stone and platform positions so that they match the following code:
+
+
+```rust
+// src/game.rs
+
+impl Game for WalkTheDog {
+    ...
+    fn update(&mut self, keystate: &KeyState) {
+        if let WalkTheDog::Loaded(walk) = self {
+            ...
+
+            walk.boy.update();
+    
+            walk.platform.position.x += walk.velocity();
+            walk.stone.move_horizontally(walk.velocity());
+
+            for bounding_box in &walk.platform.bounding_boxes() {
+                ...
+```
+
+We get a compiler error because stone doesn't have a `move_horizontally` function. 
+`Stone` is of the `Image` type and can be found in the `engine` module, 
+while position on `Image` is private. 
+
+We'll keep things that way, and instead add `move_horizontally` to the `Image` implementation, 
+as shown here:
+
+```rust
+// src/engine.rs
+
+impl Image {
+    ...
+    pub fn move_horizontally(&mut self, distance: i16) {
+        self.bounding_box.x += distance as f32;
+        self.position.x += distance;
+    }
+}
+```
+
+Two things may bother you about this code. 
+
+The first is that we are directly manipulating position on Platform but used a method on Image. 
+This inconsistency is a smell that tells us that something isn't right with our code – in this case, 
+stone and platform have two different interfaces to modify their positions, 
+even though the code has been duplicated. 
+For now, we'll leave this as is, but it's a hint regarding changes we may want to make later. 
+
+The other is that we're updating the `bounding_box` and `position` values with the same thing. 
+That's a refactoring we'll leave for the next section (putting a position on Rect Point).
+
+
+Now, you should see RHB running in place as the rock and platform move beneath him.
+
+
+We can start moving the background by matching the `stone` and `platform` movement
+in the update function of `WalkTheDogupdate`. 
+
+This change will look as follows:
+
+
+```rust
+// src/game.rs
+
+    fn update(&mut self, keystate: &KeyState) {
+        if let WalkTheDog::Loaded(walk) = self {
+            ...
+            walk.platform.position.x += walk.velocity();
+            walk.stone.move_horizontally(walk.velocity());
+            walk.background.move_horizontally(walk.velocity());
+
+
+            for bounding_box in &walk.platform.bounding_boxes() {
+               
+            ...
+```
+
+This small change will mean that RHB can now walk off the edge of the world:
+
+However, we don't want this, so let's learn how to use two tiling backgrounds to simulate
+an infinite one.
+
 
 ----------------------
+
 
 ```rust
 // src/game.rs
