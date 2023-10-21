@@ -416,6 +416,256 @@ Well, until the buffer overflows and it crashes.
 Fortunately, we'll take care of that in the next section.
 
 
+### Refactoring for endless running
+
+By now, you've properly noticed a pattern. Every time we add a new feature, 
+we start by refactoring the old code to make it easier to add it. 
+This is generally a good practice in most forms of software development, 
+and we'll be following that same pattern now. 
+
+We identified a couple of code smells while creating the infinite background, 
+so let's clean those up now, starting with dealing with all those casts.
+
+#### f32 versus i16
+
+We had to cast values several times to go from i16 to f32 and back again. 
+This isn't a safe operation; 
+the maximum of f32 is orders of magnitude larger than the maximum of i16,
+so there's the potential for our program to crash on a big f32 . 
+
+`HtmlImageElement` uses u32 types, so all the casting to make the compiler shut up isn't even correct. 
+We have two choices here:
+
+• Take our data types (such as `Rect` and `Point` ) and make them match `HtmlImageElement`.
+• Set `Rect` and any other domain object to be our preferred, smaller, type and cast to the larger type on demand.
+
+I suppose we've been using the second choice so far – that is, 
+cast at random to get the compiler to compile – but that's hardly ideal. 
+
+While the first option is tempting as we won't have any casts, 
+I prefer `Rect` and `Point` to be as small as possible, 
+so we'll set those up to use `i16` as their values. 
+
+This is more than large enough for any of our game objects, 
+and the smaller size is potentially beneficial for performance.
+
+
+Note::
+    
+    The WebAssembly specification does not have an i32 type, so an i32 would
+    be just as effective here. It also doesn't have an unsigned type, so it may be
+    worth profiling to see which type is fastest. For our purposes, we'll go with the
+    smallest reasonable size – i16 . As a professor I once had would say, "We got to
+    the moon on 16 bits!"
+    
+
+To get started with this approach, 
+change all the fields in `engine::Rect` to be i16 instead of f32. 
+Then, follow the compiler errors. Start by getting it to compile, casting i16 to f32 as necessary. 
+
+After getting it to compile and run again, look for anywhere we can cast from i16 to f32, 
+and remove it if possible. 
+This will include looking at the `Land` event in the `Event` enum, which holds an `f32`, 
+and switching it to an i16 . 
+
+Finally, look for anywhere you cast to `i16`, and see whether it's still necessary. 
+It will end up being in a lot of places but it shouldn't be too painful; 
+in the end, there should only be a few necessary casts left. 
+Do this slowly and carefully so that you don't get stuck as you work through the errors.
+
+
+```rust
+// src/engine.rs
+
+/*
+pub struct Rect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+*/
+
+pub struct Rect {
+    pub x: i16,
+    pub y: i16,
+    pub width: i16,
+    pub height: i16,
+}
+
+```
+
+Follow the compiler errors. 
+
+```rust
+// src/engine.rs
+
+impl Image {
+    pub fn new(element: HtmlImageElement, position: Point) -> Self {
+        let bounding_box = Rect {
+            x: position.x.into(),
+            y: position.y.into(),
+            width: element.width() as i16,   // as f32, 
+            height: element.height() as i16, // as f32,
+        };
+        Self {
+            element,
+            position,
+            bounding_box,
+        }
+    }
+```
+
+```rust
+// src/engine.rs
+
+impl Image {
+
+    pub fn set_x(&mut self, x: i16) {
+        self.bounding_box.x = x as i16; // as f32
+        self.position.x = x;
+    }
+```
+
+```rust
+// src/game.rs
+
+impl Platform {
+    ...
+    fn bounding_boxes(&self) -> Vec<Rect> {
+        const X_OFFSET: i16 = 60;                          // f32 = 60.0;
+        const END_HEIGHT: i16 = 54;                        // f32 = 54.0;
+        ...
+        let bounding_box_two = Rect {
+            x: destination_box.x + X_OFFSET,
+            y: destination_box.y,
+            width: destination_box.width - (X_OFFSET * 2), // 2.0),
+            height: destination_box.height,
+        };
+
+```
+
+
+```rust
+// src/game.rs
+
+impl RedHatBoy {
+    ...
+    fn bounding_box(&self) -> Rect {
+        const X_OFFSET: i16 = 18;     // f32 = 18.0;
+        const Y_OFFSET: i16 = 14;     // f32 = 14.0;
+        const WIDTH_OFFSET: i16 = 28; // f32 = 28.0;
+        let mut bounding_box = self.destination_box();
+        ...
+
+```
+
+
+
+```rust
+// src/game.rs
+
+impl RedHatBoy {
+    ...
+    fn land_on(&mut self, position: i16) {  // f32) {
+        self.state_machine = self.state_machine.transition(Event::Land(position));
+    }
+
+
+```
+
+```rust
+// src/game.rs
+
+
+pub enum Event {
+    Run,
+    Slide,
+    Update,
+    Jump,
+    KnockOut,
+    Land(i16),  //  f32),
+}
+
+```
+
+```rust
+// src/game.rs
+
+mod red_hat_boy_states {
+    ...
+    impl RedHatBoyState<Jumping> {
+        ...
+        //pub fn land_on(self, position: f32) -> RedHatBoyState<Running> {
+        pub fn land_on(self, position: i16) -> RedHatBoyState<Running> {
+                RedHatBoyState {
+                    context: self.context.reset_frame().set_on(position), // as i16),
+                    _state: Running,
+                }     
+        }//^-- fn land_on
+```
+
+
+```rust
+// src/game.rs
+
+mod red_hat_boy_states {
+    ...
+    impl RedHatBoyState<Running> {
+        ...
+        //pub fn land_on(self, position: f32) -> RedHatBoyState<Running> {
+        pub fn land_on(self, position: i16) -> RedHatBoyState<Running> {
+            RedHatBoyState {
+                context: self.context.set_on(position), // as i16),
+                _state: Running {},
+            }
+        }
+    }//^-- impl RedHatBoyState<Running>
+...
+```
+
+```rust
+// src/game.rs
+
+mod red_hat_boy_states {
+    ...
+
+    impl RedHatBoyState<Sliding> {
+        ...
+        //pub fn land_on(self, position: f32) -> RedHatBoyState<Sliding> {
+        pub fn land_on(self, position: i16) -> RedHatBoyState<Sliding> {
+            RedHatBoyState {
+                context: self.context.set_on(position), // as i16),
+                _state: Sliding {},
+            }
+        }
+
+...
+```
+
+
+
+```rust
+// src/game.rs
+
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    ...
+    fn draw(&self, renderer: &Renderer) {
+        renderer.clear(&Rect {
+            x: 0, // 0.0,
+            y: 0, // 0.0,
+            width: 600, // 600.0,
+            height: 600, // 600.0,
+        });
+        
+        if let WalkTheDog::Loaded(walk) = self {
+            ...
+        
+    ...
+```
+
 ----------------------
 
 
