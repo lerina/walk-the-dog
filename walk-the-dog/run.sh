@@ -7,7 +7,7 @@
 set -ex
 
 ## compile for plain vanilla no javascript framework 
-wasm-pack build --target web --out-dir www/pkg
+wasm-pack build --target web --out-dir www/pkg  --color=always 2>&1 | less -R
 
 ## display link for easy access
 echo "Serving at: http://127.0.0.1:8080/html/"
