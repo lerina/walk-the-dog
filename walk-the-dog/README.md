@@ -232,12 +232,57 @@ impl Image {
 impl Image {
     ...
     pub fn set_x(&mut self, x: i16) {
-        //self.bounding_box.x = x as i16;
-        self.bounding_box.position.x = x as i16;
+        //self.bounding_box.x = x;
+        self.bounding_box.position.x = x;
         self.position.x = x;
     }
     ...
 ```
+Humm Code smell!
+
+We need to set the bounding_box.x value. Rather than using position.x, 
+which will compile but expose us to errors if the internals of Rect change again, 
+we'll add a setter to the Rect implementation, as shown here:
+
+
+```rust
+// src/engine.rs
+
+impl Rect {
+...
+    pub fn set_x(&mut self, x: i16) {
+        self.position.x = x
+    }
+}
+
+```
+
+Now, in Image , we can fix the last compiler error by using set_x , as shown here:
+
+
+```rust
+// src/engine.rs
+
+impl Image {
+    ...
+    pub fn set_x(&mut self, x: i16) {
+        //self.bounding_box.position.x = x;
+        self.bounding_box.set_x(x);
+        //self.position.x = x;
+    }
+...
+```
+Note::
+    
+    You may have noticed that the code is inconsistent when it uses setters versus
+    when it uses public variables directly. In general, my rule of thumb is that
+    dumb structures such as Rect don't need setters and getters, especially if we
+    keep them immutable. However, if the internal structure changes, which it did
+    here, then it's time to add an abstraction to hide the internals. This change,
+    from x and y to a position, demonstrated the necessity of the setter after all.
+    
+
+
 
 ```rust
 // src/engine.rs
@@ -298,6 +343,242 @@ impl Renderer {
 
 ```
 
+
+```rust
+// src/game.rs
+
+impl Platform {
+    ...
+    fn destination_box(&self) ->Rect {
+        let platform = self
+                        .sheet
+                        .frames
+                        .get("13.png")
+                        .expect("13.png does not exist");
+        
+        Rect {
+            // x: self.position.x.into(),
+            // y: self.position.y.into(),
+            position: Point{ 
+                x: self.position.x.into(), 
+                y: self.position.y.into()
+            },                       
+            width: (platform.frame.w * 3).into(),
+            height: platform.frame.h.into(),
+        }
+    }//^-- destination_box
+
+    fn bounding_boxes(&self) -> Vec<Rect> {
+        ...
+            let bounding_box_one = Rect {
+            // x: destination_box.x,
+            //y: destination_box.y,
+            position: Point {
+                x: destination_box.x(),
+                y: destination_box.y()},
+            width: X_OFFSET,
+            height: END_HEIGHT,
+        };
+
+        let bounding_box_two = Rect {
+            position: Point { 
+                x: destination_box.x() + X_OFFSET,
+                y: destination_box.y()
+            },
+            width: destination_box.width - (X_OFFSET * 2), //2.0),
+            height: destination_box.height,
+        };
+
+        let bounding_box_three = Rect {
+            position: Point {
+                x: destination_box.x() + destination_box.width - X_OFFSET,
+                y: destination_box.y()
+            },
+            width: X_OFFSET,
+            height: END_HEIGHT,
+        };
+
+    }//^-- fn bounding_boxes
+    ...
+    fn draw(&self, renderer: &Renderer) {
+        renderer.draw_image( &self.image,
+                             &Rect {
+                                 position: Point {
+                                     x: platform.frame.x.into(),
+                                     y: platform.frame.y.into(),
+                                 },
+                                 width: (platform.frame.w * 3).into(),
+                                 height: platform.frame.h.into(),
+                             },
+                             &self.destination_box(), //&self.bounding_box(),
+                           );
+    }//^-- draw
+```
+
+
+
+```rust
+// src/game.rs
+
+impl RedHatBoy {
+    ...
+    fn bounding_box(&self) -> Rect {
+        const X_OFFSET: i16 = 18;     // f32 = 18.0;
+        const Y_OFFSET: i16 = 14;     // f32 = 14.0;
+        const WIDTH_OFFSET: i16 = 28; // f32 = 28.0;
+        let mut bounding_box = self.destination_box();
+        /*        
+        bounding_box.x += X_OFFSET;
+        bounding_box.width -= WIDTH_OFFSET;
+        bounding_box.y += Y_OFFSET;
+        bounding_box.height -= Y_OFFSET;
+        */
+        bounding_box.position.x += X_OFFSET;
+        bounding_box.width -= WIDTH_OFFSET;
+        bounding_box.position.y += Y_OFFSET;
+        bounding_box.height -= Y_OFFSET;
+        bounding_box
+    }
+...
+```
+
+
+
+```rust
+// src/engine.rs
+
+impl RedHatBoy {
+    ...
+
+    fn destination_box(&self) -> Rect {
+        let sprite = self.current_sprite().expect("Cell not found");
+
+        Rect {
+            /*
+            x: (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16)
+                .into(),
+            y: (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16)
+                .into(),
+            */
+            position: Point {
+                x: (self.state_machine.context().position.x + sprite.sprite_source_size.x) // as i16)
+                .into(),
+                y: (self.state_machine.context().position.y + sprite.sprite_source_size.y) //  as i16)
+                .into(),
+            },
+            width: sprite.frame.w.into(),
+            height: sprite.frame.h.into(),
+        }
+    }
+```
+
+
+```rust
+// src/engine.rs
+
+impl RedHatBoy {
+    ...
+    fn draw(&self, renderer: &Renderer) {
+        let sprite = self.current_sprite().expect("Cell not found");
+        
+        renderer.draw_image(
+            &self.image,
+            &Rect {
+                //x: sprite.frame.x.into(),
+                //y: sprite.frame.y.into(),
+                position: Point {
+                    x: sprite.frame.x.into(),
+                    y: sprite.frame.y.into(),
+                },
+                width: sprite.frame.w.into(),
+                height: sprite.frame.h.into(),
+            },
+            &self.destination_box(),
+        );
+    }//^-- fn draw
+
+```
+
+
+
+At this point, you should see RHB running to the right and jumping on and off the
+platform again. Make sure you check out this behavior each time you get to a successful
+compile since it is easy to make a mistake as you make a large number of small changes.
+
+----
+
+Now that we've prepared `Rect` to hold a `position`, we can remove the **duplication**
+of that data in Image. 
+
+We'll start by removing `position` from the `Image` struct, as shown here:
+
+```rust
+// src/engine.rs
+
+pub struct Image {
+    element: HtmlImageElement,
+    //position: Point,
+    bounding_box: Rect,
+}
+
+```
+
+Now, let's follow the compiler and remove all references to position in the Image
+implementation. Fortunately, there are no longer any references to position outside
+of the Image implementation, so we can do this by making a few quick changes. 
+These changes are shown here. 
+Note how wherever we previously used position, 
+we are now using `bounding_box.position` or `bounding_box.x()` :
+
+
+```rust
+// src/engine.rs
+
+impl Image {
+    pub fn new(element: HtmlImageElement, position: Point) -> Self {
+        let bounding_box = Rect {
+            /*
+            x: position.x.into(),
+            y: position.y.into(),
+            */
+            position: Point{x: position.x.into(), y: position.y.into()},
+            width: element.width() as i16, 
+            height: element.height() as i16,
+        };
+        Self {
+            element,
+            //position,
+            bounding_box,
+        }
+    }
+
+
+```
+
+```rust
+// src/engine.rs
+
+
+impl Image {
+    ...
+    pub fn draw(&self, renderer: &Renderer) {
+        renderer.draw_entire_image(&self.element, &self.bounding_box.position); //position);
+    }
+    ...
+```
+
+`set_x` was a bit noisy. 
+
+```rust
+// src/engine.rs
+
+impl Image {
+    ...
+    pub fn set_x(&mut self, x: i16) {
+        self.bounding_box.set_x(x);
+    }
+...
+```
 -------------
 
 ```rust

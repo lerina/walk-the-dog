@@ -71,6 +71,9 @@ impl Rect {
     pub fn bottom(&self) -> i16 {
         self.y() + self.height
     }
+    pub fn set_x(&mut self, x: i16) {
+        self.position.x = x
+    }
 }//^-- impl Rect
 
 #[derive(Deserialize, Clone)]
@@ -102,7 +105,7 @@ pub struct Sheet {
 
 pub struct Image {
     element: HtmlImageElement,
-    position: Point,
+    //position: Point,
     bounding_box: Rect,
 }
 
@@ -119,7 +122,7 @@ impl Image {
         };
         Self {
             element,
-            position,
+            //position,
             bounding_box,
         }
     }
@@ -129,7 +132,7 @@ impl Image {
     }
 
     pub fn draw(&self, renderer: &Renderer) {
-        renderer.draw_entire_image(&self.element, &self.position);
+        renderer.draw_entire_image(&self.element, &self.bounding_box.position); //position);
     }
 
     pub fn draw_rect(&self, renderer: &Renderer) {
@@ -137,11 +140,13 @@ impl Image {
     }
 
     pub fn move_horizontally(&mut self, distance: i16) {
-        self.set_x(self.position.x + distance);
+        //self.set_x(self.position.x + distance);
+        self.set_x(self.bounding_box.x() + distance);
     }
     pub fn set_x(&mut self, x: i16) {
-        self.bounding_box.position.x = x as i16;
-        self.position.x = x;
+        //self.bounding_box.position.x = x;
+        self.bounding_box.set_x(x);
+        //self.bounding_box.position.x = x;
     }
     /*
     pub fn right(&self) -> i16 {

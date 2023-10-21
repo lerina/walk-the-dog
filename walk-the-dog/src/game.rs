@@ -35,8 +35,9 @@ impl Platform {
                         .expect("13.png does not exist");
         
         Rect {
-            x: self.position.x.into(),
-            y: self.position.y.into(),
+            // x: self.position.x.into(),
+            // y: self.position.y.into(),
+            position: Point{ x: self.position.x.into(), y: self.position.y.into()},                       
             width: (platform.frame.w * 3).into(),
             height: platform.frame.h.into(),
         }
@@ -48,12 +49,32 @@ impl Platform {
         let destination_box = self.destination_box();
 
         let bounding_box_one = Rect {
-            x: destination_box.x,
-            y: destination_box.y,
+            // x: destination_box.x,
+            //y: destination_box.y,
+            position: Point {
+                x: destination_box.x(),
+                y: destination_box.y()},
             width: X_OFFSET,
             height: END_HEIGHT,
         };
+        let bounding_box_two = Rect {
+            position: Point { 
+                x: destination_box.x() + X_OFFSET,
+                y: destination_box.y()
+            },
+            width: destination_box.width - (X_OFFSET * 2), //2.0),
+            height: destination_box.height,
+        };
 
+        let bounding_box_three = Rect {
+            position: Point {
+                x: destination_box.x() + destination_box.width - X_OFFSET,
+                y: destination_box.y()
+            },
+            width: X_OFFSET,
+            height: END_HEIGHT,
+        };
+/*
         let bounding_box_two = Rect {
             x: destination_box.x + X_OFFSET,
             y: destination_box.y,
@@ -67,9 +88,10 @@ impl Platform {
             width: X_OFFSET,
             height: END_HEIGHT,
         };
-
+*/
         vec![bounding_box_one, bounding_box_two, bounding_box_three]
-}//^-- fn bounding_boxes
+    }//^-- fn bounding_boxes
+
     fn draw(&self, renderer: &Renderer) {
         let platform = self
                         .sheet
@@ -79,8 +101,12 @@ impl Platform {
         
         renderer.draw_image( &self.image,
                              &Rect {
-                                 x: platform.frame.x.into(),
-                                 y: platform.frame.y.into(),
+                                 //x: platform.frame.x.into(),
+                                 //y: platform.frame.y.into(),
+                                 position: Point {
+                                     x: platform.frame.x.into(),
+                                     y: platform.frame.y.into(),
+                                 },
                                  width: (platform.frame.w * 3).into(),
                                  height: platform.frame.h.into(),
                              },
@@ -147,9 +173,15 @@ impl RedHatBoy {
         const Y_OFFSET: i16 = 14;     // f32 = 14.0;
         const WIDTH_OFFSET: i16 = 28; // f32 = 28.0;
         let mut bounding_box = self.destination_box();
+        /*        
         bounding_box.x += X_OFFSET;
         bounding_box.width -= WIDTH_OFFSET;
         bounding_box.y += Y_OFFSET;
+        bounding_box.height -= Y_OFFSET;
+        */
+        bounding_box.position.x += X_OFFSET;
+        bounding_box.width -= WIDTH_OFFSET;
+        bounding_box.position.y += Y_OFFSET;
         bounding_box.height -= Y_OFFSET;
         bounding_box
     }
@@ -158,10 +190,18 @@ impl RedHatBoy {
         let sprite = self.current_sprite().expect("Cell not found");
 
         Rect {
+            /*
             x: (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16)
                 .into(),
             y: (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16)
                 .into(),
+            */
+            position: Point {
+                x: (self.state_machine.context().position.x + sprite.sprite_source_size.x) // as i16)
+                .into(),
+                y: (self.state_machine.context().position.y + sprite.sprite_source_size.y) // as i16)
+                .into(),
+            },
             width: sprite.frame.w.into(),
             height: sprite.frame.h.into(),
         }
@@ -179,12 +219,16 @@ impl RedHatBoy {
         renderer.draw_image(
             &self.image,
             &Rect {
-                x: sprite.frame.x.into(),
-                y: sprite.frame.y.into(),
+                //x: sprite.frame.x.into(),
+                //y: sprite.frame.y.into(),
+                position: Point {
+                    x: sprite.frame.x.into(),
+                    y: sprite.frame.y.into(),
+                },
                 width: sprite.frame.w.into(),
                 height: sprite.frame.h.into(),
             },
-            &self.destination_box(), //&self.bounding_box(),
+            &self.destination_box(),
         );
     }//^-- fn draw
 
