@@ -45,6 +45,7 @@ pub trait Obstacle {
     fn draw(&self, renderer: &Renderer);
     //fn draw_rect(&self, renderer: &Renderer);
     fn move_horizontally(&mut self, x: i16);
+    fn right(&self) -> i16;
 }
 
 
@@ -71,8 +72,6 @@ impl Platform {
                         .expect("13.png does not exist");
         
         Rect {
-            // x: self.position.x.into(),
-            // y: self.position.y.into(),
             position: Point{ x: self.position.x.into(), y: self.position.y.into()},                       
             width: (platform.frame.w * 3).into(),
             height: platform.frame.h.into(),
@@ -80,13 +79,11 @@ impl Platform {
     }//^-- destination_box
 
     fn bounding_boxes(&self) -> Vec<Rect> {
-        const X_OFFSET: i16 = 60; //f32 = 60.0;
-        const END_HEIGHT: i16 = 54; //f32 = 54.0;
+        const X_OFFSET: i16 = 60; 
+        const END_HEIGHT: i16 = 54; 
         let destination_box = self.destination_box();
 
         let bounding_box_one = Rect {
-            // x: destination_box.x,
-            //y: destination_box.y,
             position: Point {
                 x: destination_box.x(),
                 y: destination_box.y()},
@@ -98,7 +95,7 @@ impl Platform {
                 x: destination_box.x() + X_OFFSET,
                 y: destination_box.y()
             },
-            width: destination_box.width - (X_OFFSET * 2), //2.0),
+            width: destination_box.width - (X_OFFSET * 2),
             height: destination_box.height,
         };
 
@@ -114,30 +111,6 @@ impl Platform {
         vec![bounding_box_one, bounding_box_two, bounding_box_three]
     }//^-- fn bounding_boxes
 
-/* //NOW in impl Obstacle for Platform
-    fn draw(&self, renderer: &Renderer) {
-        let platform = self
-                        .sheet
-                        .frames
-                        .get("13.png")
-                        .expect("13.png does not exist");
-        
-        renderer.draw_image( &self.image,
-                             &Rect {
-                                 //x: platform.frame.x.into(),
-                                 //y: platform.frame.y.into(),
-                                 position: Point {
-                                     x: platform.frame.x.into(),
-                                     y: platform.frame.y.into(),
-                                 },
-                                 width: (platform.frame.w * 3).into(),
-                                 height: platform.frame.h.into(),
-                             },
-                             &self.destination_box(), //&self.bounding_box(),
-                           );
-    }//^-- draw
-
-*/
     fn draw_rect(&self, renderer: &Renderer){
         for bounding_box in self.bounding_boxes() {
             renderer.draw_rect(&bounding_box);
@@ -147,7 +120,7 @@ impl Platform {
 }
 
 impl Obstacle for Platform {
-    // previously in impl Platform
+    
     fn draw(&self, renderer: &Renderer) {
         let platform = self
                         .sheet
@@ -157,27 +130,16 @@ impl Obstacle for Platform {
         
         renderer.draw_image( &self.image,
                              &Rect {
-                                 //x: platform.frame.x.into(),
-                                 //y: platform.frame.y.into(),
-                                 position: Point {
+                                     position: Point {
                                      x: platform.frame.x.into(),
                                      y: platform.frame.y.into(),
                                  },
                                  width: (platform.frame.w * 3).into(),
                                  height: platform.frame.h.into(),
                              },
-                             &self.destination_box(), //&self.bounding_box(),
+                             &self.destination_box(),
                            );
     }//^-- draw
-  
-/*  
-    // previously in impl Platform
-    fn draw_rect(&self, renderer: &Renderer){
-        for bounding_box in self.bounding_boxes() {
-            renderer.draw_rect(&bounding_box);
-        }
-    }
-*/
 
     fn move_horizontally(&mut self, x: i16) {
         self.position.x += x;
@@ -197,6 +159,14 @@ impl Obstacle for Platform {
             }
         }
     }//^-- check_intersection
+
+    fn right(&self) -> i16 {
+        self.bounding_boxes()
+            .last()
+            .unwrap_or(&Rect::default())
+            .right()
+    }
+
 }//^-- impl Obstacle
 
 pub struct RedHatBoy {
@@ -908,24 +878,30 @@ impl Game for WalkTheDog {
 
     fn draw(&self, renderer: &Renderer) {
         renderer.clear(&Rect {
-            x: 0, // 0.0,
-            y: 0, // 0.0,
-            width: 600, // 600.0,
-            height: 600, // 600.0,
+            x: 0, 
+            y: 0, 
+            width: 600, 
+            height: 600,
         });
 
         if let WalkTheDog::Loaded(walk) = self {
-            //walk.background.draw(renderer);
+            
             walk.backgrounds.iter().for_each(|background| {
                 background.draw(renderer);
             });
             walk.boy.draw(renderer);
             walk.boy.draw_rect(renderer);
-            //walk.stone.draw(renderer);
+            
             walk.stone.draw_rect(renderer);
-            //walk.platform.draw(renderer);
+            
             walk.platform.draw_rect(renderer);
 
+            // removing an obstacle from the obstacles
+            // Vec when they go off screen            
+            walk.obstacles.retain(|obstacle|
+                obstacle.right() > 0);
+
+            // move and collide with the obstacles
             walk.obstacles.iter().for_each(|obstacle| {
                 obstacle.draw(renderer);
             });
