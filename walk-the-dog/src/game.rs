@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use web_sys::HtmlImageElement;
@@ -5,7 +6,7 @@ use web_sys::HtmlImageElement;
 use self::red_hat_boy_states::*;
 use crate::{
     browser,
-    engine::{self, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet},
+    engine::{self, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet},
 };
 
 const HEIGHT: i16 = 600;
@@ -37,6 +38,9 @@ impl Obstacle for Barrier {
     fn move_horizontally(&mut self, x: i16) {
         self.image.move_horizontally(x);
     }
+    fn right(&self) -> i16 {
+        self.image.right()
+    }
 }//^-- impl Obstacle for Barrier
 
 
@@ -48,21 +52,36 @@ pub trait Obstacle {
     fn right(&self) -> i16;
 }
 
-
+/*
 struct Platform {
     sheet: Sheet,
     image: HtmlImageElement,
     position: Point,
 }
+*/
+
+pub struct Platform {
+    //sheet: SpriteSheet,
+    sheet: Rc<SpriteSheet>,
+    position: Point,
+}
 
 impl Platform {
-    fn new(sheet: Sheet, image: HtmlImageElement, position: Point) -> Self {
+/*
+    //fn new(sheet: Sheet, image: HtmlImageElement, position: Point) -> Self {    
+    fn new(sheet: SpriteSheet, image: HtmlImageElement, position: Point) -> Self {
         Platform {
-            sheet,
+            /*sheet,
             image,
+            */
+            sheet,
             position,
         }
     }//^-- new
+*/
+    pub fn new(sheet: Rc<SpriteSheet>, position: Point) -> Self {
+        Platform { sheet, position }
+    }
 
     fn destination_box(&self) ->Rect {
         let platform = self
@@ -216,16 +235,10 @@ impl RedHatBoy {
     }
 
     fn bounding_box(&self) -> Rect {
-        const X_OFFSET: i16 = 18;     // f32 = 18.0;
-        const Y_OFFSET: i16 = 14;     // f32 = 14.0;
-        const WIDTH_OFFSET: i16 = 28; // f32 = 28.0;
+        const X_OFFSET: i16 = 18;     
+        const Y_OFFSET: i16 = 14;     
+        const WIDTH_OFFSET: i16 = 28; 
         let mut bounding_box = self.destination_box();
-        /*        
-        bounding_box.x += X_OFFSET;
-        bounding_box.width -= WIDTH_OFFSET;
-        bounding_box.y += Y_OFFSET;
-        bounding_box.height -= Y_OFFSET;
-        */
         bounding_box.position.x += X_OFFSET;
         bounding_box.width -= WIDTH_OFFSET;
         bounding_box.position.y += Y_OFFSET;
@@ -237,16 +250,10 @@ impl RedHatBoy {
         let sprite = self.current_sprite().expect("Cell not found");
 
         Rect {
-            /*
-            x: (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16)
-                .into(),
-            y: (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16)
-                .into(),
-            */
             position: Point {
-                x: (self.state_machine.context().position.x + sprite.sprite_source_size.x) // as i16)
+                x: (self.state_machine.context().position.x + sprite.sprite_source_size.x)
                 .into(),
-                y: (self.state_machine.context().position.y + sprite.sprite_source_size.y) // as i16)
+                y: (self.state_machine.context().position.y + sprite.sprite_source_size.y)
                 .into(),
             },
             width: sprite.frame.w.into(),
@@ -266,8 +273,6 @@ impl RedHatBoy {
         renderer.draw_image(
             &self.image,
             &Rect {
-                //x: sprite.frame.x.into(),
-                //y: sprite.frame.y.into(),
                 position: Point {
                     x: sprite.frame.x.into(),
                     y: sprite.frame.y.into(),
@@ -747,6 +752,7 @@ pub struct Walk {
 }
 */
 pub struct Walk {
+    obstacle_sheet: Rc<SpriteSheet>,
     boy: RedHatBoy,
     backgrounds: [Image; 2],
     obstacles: Vec<Box<dyn Obstacle>>,
@@ -778,11 +784,30 @@ impl Game for WalkTheDog {
                 let rhb = RedHatBoy::new(sheet, engine::load_image("../resources/pix/rhb.png").await?);
                 let background = engine::load_image("../resources/pix/BG.png").await?;
                 let stone = engine::load_image("../resources/pix/Stone.png").await?;
-                let platform_sheet = browser::fetch_json("../resources/pix/tiles.json").await?;
-                let platform = Platform::new( platform_sheet.into_serde::<Sheet>()?,
-                                              engine::load_image("../resources/pix/tiles.png").await?,
-                                              Point { x: 200, y: 400 },
-                               );
+                // change of name
+                // let platform_sheet = browser::fetch_json("../resources/pix/tiles.json").await?;
+                let tiles = browser::fetch_json("../resources/pix/tiles.json").await?;
+
+                let sprite_sheet = Rc::new(SpriteSheet::new(
+                                    tiles.into_serde::<Sheet>()?,
+                                    engine::load_image("tiles.png").await?,
+                                   ));
+                
+                /*
+                let platform = Platform::new(  
+                                   SpriteSheet::new(platform_sheet.into_serde::<Sheet>()?,
+                                                    engine::load_image("../resources/pix/tiles.png").await?, 
+                                                  ),
+                                    Point { x: 200, y: 400 },
+                               );        
+                */
+                let platform = Platform::new(
+                                    sprite_sheet.clone(),
+                                    Point {
+                                        x: FIRST_PLATFORM,
+                                        y: LOW_PLATFORM,
+                                    },
+                                );
 
                 let background_width = background.width() as i16;
                 let backgrounds = [ Image::new( background.clone(), Point { x: 0, y: 0 }),
@@ -795,11 +820,16 @@ impl Game for WalkTheDog {
                                       Box::new(platform),
                                             ];
 
+                /*
                 let walk = Walk {   boy: rhb, 
                                     backgrounds: backgrounds,
-                                    //stone: Image::new(stone, Point { x: 150, y: 546 }),
-                                    //platform: Box::new(platform), //platform: platform,
-                                    obstacles: obstacles, 
+                                    obstacles: obstacles,
+                                };                
+                */
+                let walk = Walk {   boy: rhb, 
+                                    backgrounds: backgrounds,
+                                    obstacles: obstacles,
+                                    obstacle_sheet: sprite_sheet, 
                                 };
 
                 Ok(Box::new(WalkTheDog::Loaded(walk)))
