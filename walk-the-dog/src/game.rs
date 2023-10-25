@@ -11,6 +11,9 @@ use crate::{
 
 const HEIGHT: i16 = 600;
 
+const FIRST_PLATFORM: i16 = 200;
+const LOW_PLATFORM: i16 = 400;
+
 
 pub struct Barrier {
     image: Image,
@@ -59,10 +62,17 @@ struct Platform {
     position: Point,
 }
 */
-
+/*
 pub struct Platform {
     //sheet: SpriteSheet,
     sheet: Rc<SpriteSheet>,
+    position: Point,
+}
+*/
+pub struct Platform {
+    sheet: Rc<SpriteSheet>,
+    bounding_boxes: Vec<Rect>,
+    sprites: Vec<Cell>,
     position: Point,
 }
 
@@ -79,10 +89,42 @@ impl Platform {
         }
     }//^-- new
 */
-    pub fn new(sheet: Rc<SpriteSheet>, position: Point) -> Self {
+/*    pub fn new(sheet: Rc<SpriteSheet>, position: Point) -> Self {
         Platform { sheet, position }
     }
+*/
 
+    pub fn new( sheet: Rc<SpriteSheet>, position: Point,
+                sprite_names: &[&str], bounding_boxes: &[Rect],) -> Self {
+
+        let sprites = sprite_names
+                            .iter()
+                            .filter_map(|sprite_name|
+                            sheet.cell(sprite_name).cloned())
+                            .collect();
+        let bounding_boxes = bounding_boxes
+                                .iter()
+                                .map(|bounding_box| {
+                                    Rect::new_from_x_y(
+                                        bounding_box.x() + position.x,
+                                        bounding_box.y() + position.y,
+                                        bounding_box.width,
+                                        bounding_box.height,
+                                    )
+                                })
+                                .collect();
+
+        Platform {
+            sheet,
+            position,
+            sprites,
+            bounding_boxes,
+        }
+    }//^-- fn new
+
+
+
+/* //No longer used using mutiple platform
     fn destination_box(&self) ->Rect {
         let platform = self
                         .sheet
@@ -96,7 +138,9 @@ impl Platform {
             height: platform.frame.h.into(),
         }
     }//^-- destination_box
+*/
 
+/*
     fn bounding_boxes(&self) -> Vec<Rect> {
         const X_OFFSET: i16 = 60; 
         const END_HEIGHT: i16 = 54; 
@@ -129,6 +173,10 @@ impl Platform {
 
         vec![bounding_box_one, bounding_box_two, bounding_box_three]
     }//^-- fn bounding_boxes
+*/
+    fn bounding_boxes(&self) -> &Vec<Rect> {
+        &self.bounding_boxes
+    }
 
     fn draw_rect(&self, renderer: &Renderer){
         for bounding_box in self.bounding_boxes() {
@@ -139,7 +187,8 @@ impl Platform {
 }
 
 impl Obstacle for Platform {
-    
+
+/*    
     fn draw(&self, renderer: &Renderer) {
         let platform = self
                         .sheet
@@ -159,9 +208,41 @@ impl Obstacle for Platform {
                              &self.destination_box(),
                            );
     }//^-- draw
-
+*/
+    fn draw(&self, renderer: &Renderer) {
+        let mut x = 0;
+        self.sprites.iter().for_each(|sprite| {
+            self.sheet.draw(
+                renderer,
+                &Rect::new_from_x_y(
+                    sprite.frame.x,
+                    sprite.frame.y,
+                    sprite.frame.w,
+                    sprite.frame.h,
+                ),
+                // Just use position and the standard
+                // widths in the tileset
+                &Rect::new_from_x_y(
+                    self.position.x + x,
+                    self.position.y,
+                    sprite.frame.w,
+                    sprite.frame.h,
+                ),
+            );
+            x += sprite.frame.w;
+        });
+    }//^-- fn draw
+/*
     fn move_horizontally(&mut self, x: i16) {
         self.position.x += x;
+    }
+*/
+    fn move_horizontally(&mut self, x: i16) {
+        self.position.x += x;
+        self.bounding_boxes.iter_mut()
+                           .for_each(|bounding_box| {
+                                bounding_box.set_x(bounding_box.position.x + x);
+                            });
     }
 
     fn check_intersection(&self, boy: &mut RedHatBoy) {
@@ -462,7 +543,6 @@ mod red_hat_boy_states {
     const JUMP_SPEED: i16 = -25;
     const GRAVITY: i16 = 1;
     const TERMINAL_VELOCITY: i16 = 20;
-
 
 
     #[derive(Copy, Clone)]
@@ -801,6 +881,7 @@ impl Game for WalkTheDog {
                                     Point { x: 200, y: 400 },
                                );        
                 */
+                /*
                 let platform = Platform::new(
                                     sprite_sheet.clone(),
                                     Point {
@@ -808,7 +889,20 @@ impl Game for WalkTheDog {
                                         y: LOW_PLATFORM,
                                     },
                                 );
-
+                */
+                let platform = Platform::new(
+                                sprite_sheet.clone(),
+                                Point {
+                                    x: FIRST_PLATFORM,
+                                    y: LOW_PLATFORM,
+                                },
+                                &["13.png", "14.png", "15.png"],
+                                &[
+                                    Rect::new_from_x_y(0, 0, 60, 54),
+                                    Rect::new_from_x_y(60, 0, 384 - (60 * 2), 93),
+                                    Rect::new_from_x_y(384 - 60, 0, 60, 54),
+                                ],
+                );
                 let background_width = background.width() as i16;
                 let backgrounds = [ Image::new( background.clone(), Point { x: 0, y: 0 }),
                                     Image::new( background, Point { x: background_width, y: 0,},),
