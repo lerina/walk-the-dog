@@ -7,7 +7,8 @@ use crate::engine::{Image, Point, Rect, SpriteSheet};
 const LOW_PLATFORM: i16 = 420;
 const HIGH_PLATFORM: i16 = 375;
 const FIRST_PLATFORM: i16 = 370;
-const STONE_ON_GROUND: i16 = 546;
+
+const STONE_ON_GROUND: i16 = 555; //546;
 
 const FLOATING_PLATFORM_SPRITES: [&str; 3] = ["13.png", "14.png", "15.png"];
 const PLATFORM_WIDTH: i16 = 384;
