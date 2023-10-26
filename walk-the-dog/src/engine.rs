@@ -24,6 +24,8 @@ pub struct Rect {
 }
 
 impl Rect {
+/* //This was thebug!!!!
+    // error[E0015]: cannot call non-const fn `Rect::new_from_x_y` in constants
     pub fn new(position: Point, width: i16, height: i16) -> Self {
         Rect {
             position,
@@ -35,7 +37,18 @@ impl Rect {
     pub fn new_from_x_y(x: i16, y: i16, width: i16, height: i16) -> Self {
         Rect::new(Point { x, y }, width, height)
     }
+*/
+    pub const fn new(position: Point, width: i16, height: i16) -> Self {
+        Rect {
+            position,
+            width,
+            height,
+        }
+    }
 
+    pub const fn new_from_x_y(x: i16, y: i16, width: i16, height: i16) -> Self {
+        Rect::new(Point { x, y }, width, height)
+    }
     pub fn x(&self) -> i16 {
         self.position.x
     }

@@ -1,5 +1,5 @@
 [package]
-name = "walk-the-dog"
+name = "walk_the_dog"
 version = "0.1.0"
 categories = ["wasm"]
 readme = "README.md"

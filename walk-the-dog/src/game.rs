@@ -2,18 +2,23 @@ use std::rc::Rc;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use web_sys::HtmlImageElement;
+use rand::prelude::*; //{thread_rng, Rng};
 
 use self::red_hat_boy_states::*;
 use crate::{
     browser,
     engine::{self, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet},
-    segments::stone_and_platform,
+    segments::{stone_and_platform, platform_and_stone,},
 };
 
 const HEIGHT: i16 = 600;
+const TIMELINE_MINIMUM: i16 = 1000;
+const OBSTACLE_BUFFER: i16 = 20;
 
+/*
 const FIRST_PLATFORM: i16 = 200;
 const LOW_PLATFORM: i16 = 400;
+*/
 
 
 pub struct Barrier {
@@ -28,7 +33,6 @@ impl Barrier {
 
 
 impl Obstacle for Barrier {
-    //fn check_intersection(&self, boy: &mut RedHatBoy) { todo!() }
     fn check_intersection(&self, boy: &mut RedHatBoy) {
         if boy.bounding_box().intersects(self.image.bounding_box()) {
             boy.knock_out()
@@ -248,13 +252,12 @@ impl Obstacle for Platform {
 
     fn check_intersection(&self, boy: &mut RedHatBoy) {
         if let Some(box_to_land_on) = self
-                .bounding_boxes()
-                .iter()
-                .find(|&bounding_box| boy.bounding_box()
-                .intersects(bounding_box))
+            .bounding_boxes()
+            .iter()
+            .find(|&bounding_box| boy.bounding_box().intersects(bounding_box))
         {
             if boy.velocity_y() > 0 && boy.pos_y() < self.position.y {
-                    boy.land_on(box_to_land_on.y());
+                boy.land_on(box_to_land_on.y());
             } else {
                 boy.knock_out();
             }
@@ -268,7 +271,7 @@ impl Obstacle for Platform {
             .right()
     }
 
-}//^-- impl Obstacle
+}//^-- impl Obstacle for Platform
 
 pub struct RedHatBoy {
     state_machine: RedHatBoyStateMachine,
@@ -711,10 +714,9 @@ mod red_hat_boy_states {
             }
         }
 
-        //pub fn land_on(self, position: f32) -> RedHatBoyState<Sliding> {
         pub fn land_on(self, position: i16) -> RedHatBoyState<Sliding> {
             RedHatBoyState {
-                context: self.context.set_on(position), // as i16),
+                context: self.context.set_on(position),
                 _state: Sliding {},
             }
         }
@@ -774,7 +776,6 @@ mod red_hat_boy_states {
 
     impl RedHatBoyContext {
         pub fn update(mut self, frame_count: u8) -> Self {
-            //self.velocity.y += GRAVITY;
             if self.velocity.y < TERMINAL_VELOCITY {
                 self.velocity.y += GRAVITY;
             }
@@ -824,25 +825,74 @@ mod red_hat_boy_states {
     }
 }
 
-/*
-pub struct Walk {
-    boy: RedHatBoy,
-    backgrounds: [Image; 2],
-    stone: Image,
-    platform: Box<dyn Obstacle>, //platform: Platform,
-}
-*/
 pub struct Walk {
     obstacle_sheet: Rc<SpriteSheet>,
     boy: RedHatBoy,
     backgrounds: [Image; 2],
     obstacles: Vec<Box<dyn Obstacle>>,
+    stone: HtmlImageElement,
+    timeline: i16,
 }
 
 impl Walk {
     fn velocity(&self) -> i16 {
         -self.boy.walking_speed()
     }
+
+/* 1st ver
+    fn generate_next_segment(&mut self) {
+
+        let mut next_obstacles = stone_and_platform(
+                                    self.stone.clone(),
+                                    self.obstacle_sheet.clone(),
+                                    self.timeline + OBSTACLE_BUFFER,
+                                );
+        self.timeline = rightmost(&next_obstacles);
+        self.obstacles.append(&mut next_obstacles);
+    }//^-- fn generate_next_segment
+*/
+/* 2nd ver
+    fn generate_next_segment(&mut self) {
+        let mut rng = thread_rng();
+        let next_segment = rng.gen_range(0..1);
+        
+        let mut next_obstacles = match next_segment {
+            0 => stone_and_platform(
+                self.stone.clone(),
+                self.obstacle_sheet.clone(),
+                self.timeline + OBSTACLE_BUFFER,
+                ),
+            _ => vec![],
+        };
+
+        self.timeline = rightmost(&next_obstacles);
+        self.obstacles.append(&mut next_obstacles);
+
+    }//^-- fn generate_next_segment
+*/
+
+    fn generate_next_segment(&mut self) {
+        let mut rng = thread_rng();
+        let next_segment = rng.gen_range(0..2);
+
+        let mut next_obstacles = match next_segment {
+            0 => stone_and_platform(
+                self.stone.clone(),
+                self.obstacle_sheet.clone(),
+                self.timeline + OBSTACLE_BUFFER,
+            ),
+            1 => platform_and_stone(
+                self.stone.clone(),
+                self.obstacle_sheet.clone(),
+                self.timeline + OBSTACLE_BUFFER,
+            ),
+            _ =>vec![],
+        };
+
+        self.timeline = rightmost(&next_obstacles);
+        self.obstacles.append(&mut next_obstacles);
+
+    }//^-- fn generate_next_segment
 }
 
 pub enum WalkTheDog {
@@ -866,12 +916,13 @@ impl Game for WalkTheDog {
                 let background = engine::load_image("../resources/pix/BG.png").await?;
                 let stone = engine::load_image("../resources/pix/Stone.png").await?;
                 let tiles = browser::fetch_json("../resources/pix/tiles.json").await?;
-
-                let sprite_sheet = Rc::new(SpriteSheet::new(
-                                    tiles.into_serde::<Sheet>()?,
-                                    engine::load_image("tiles.png").await?,
+                let sprite_sheet = Rc::new(
+                                    SpriteSheet::new(
+                                        tiles.into_serde::<Sheet>()?,
+                                        engine::load_image("../resources/pix/tiles.png").await?,
                                    ));
-                
+
+/*                
                 let platform = Platform::new(
                                 sprite_sheet.clone(),
                                 Point {
@@ -885,23 +936,31 @@ impl Game for WalkTheDog {
                                     Rect::new_from_x_y(384 - 60, 0, 60, 54),
                                 ],
                 );
-                let background_width = background.width() as i16;
-                let backgrounds = [ Image::new( background.clone(), Point { x: 0, y: 0 }),
-                                    Image::new( background, Point { x: background_width, y: 0,},),
-                                  ];
+*/
 
+                let background_width = background.width() as i16;
+                
                 /*
                 let obstacles = vec![ Box::new(Barrier::new(
                                                  Image::new( stone, Point { x: 150, y: 546 }))),
                                       Box::new(platform),
                                             ];
                 */
-                let obstacles = stone_and_platform(stone, sprite_sheet.clone(), 0);
+                //let obstacles = stone_and_platform(stone, sprite_sheet.clone(), 0);
+                let starting_obstacles = stone_and_platform(stone.clone(), sprite_sheet.clone(), 0);
+                let timeline = rightmost(&starting_obstacles);
+
+                let backgrounds = [ Image::new( background.clone(), Point { x: 0, y: 0 }),
+                                    Image::new( background, Point { x: background_width, y: 0,},),
+                                  ];
 
                 let walk = Walk {   boy: rhb, 
                                     backgrounds: backgrounds,
-                                    obstacles: obstacles,
-                                    obstacle_sheet: sprite_sheet, 
+                                    obstacles: starting_obstacles, // obstacles,
+                                    obstacle_sheet: sprite_sheet,
+
+                                    stone: stone, 
+                                    timeline: timeline,
                                 };
 
                 Ok(Box::new(WalkTheDog::Loaded(walk)))
@@ -910,6 +969,9 @@ impl Game for WalkTheDog {
         }
     }//^-- async fn initialize
 
+
+
+/*
     fn update(&mut self, keystate: &KeyState) {
         if let WalkTheDog::Loaded(walk) = self {
             if keystate.is_pressed("ArrowRight") {
@@ -928,33 +990,12 @@ impl Game for WalkTheDog {
 
             let velocity = walk.velocity();
 
+/*
             walk.platform.position.x += walk.velocity();
             walk.platform.move_horizontally(velocity); //walk.velocity());
             walk.stone.move_horizontally(velocity);
             
- /*
-            // check_intersection
-            for bounding_box in &walk.platform.bounding_boxes() {
-                if walk.boy.bounding_box().intersects(bounding_box) {
-                    if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
-                        walk.boy.land_on(bounding_box.y);
-                    } else {
-                        walk.boy.knock_out();
-                    }
-                }
-            }
-
-            //// check_intersection comment no longer needed
-            //walk.platform.check_intersection(&mut walk.boy);   
-
-            // knock_out
-            if walk.boy
-                   .destination_box()
-                   .intersects(walk.stone.bounding_box())
-            {
-                walk.boy.knock_out();
-            }
-*/
+ 
             // background states
             let [first_background, second_background] = &mut walk.backgrounds;
             first_background.move_horizontally(velocity);
@@ -969,15 +1010,121 @@ impl Game for WalkTheDog {
                 first_background.right());
             }
 
+            // removing an obstacle from the obstacles
+            // Vec when they go off screen            
+            walk.obstacles.retain(|obstacle|
+                obstacle.right() > 0);
             
             walk.obstacles.iter_mut().for_each(|obstacle| {
                 obstacle.move_horizontally(velocity);
                 obstacle.check_intersection(&mut walk.boy);
             });
+  
+/*          
+            if walk.timeline < TIMELINE_MINIMUM {
+                let mut next_obstacles = stone_and_platform(
+                                            walk.stone.clone(),
+                                            walk.obstacle_sheet.clone(),
+                                            walk.timeline + OBSTACLE_BUFFER,
+                                        );
+                walk.timeline = rightmost(&next_obstacles);
+                walk.obstacles.append(&mut next_obstacles);
+            } else {
+                walk.timeline += velocity;
+            }
+*/
+            if walk.timeline < TIMELINE_MINIMUM {
+                walk.generate_next_segment()
+            } else {
+                walk.timeline += velocity;
+            }
+*/
+            let [first_background, second_background] = &mut walk.backgrounds;
+            first_background.move_horizontally(velocity);
+            second_background.move_horizontally(velocity);
 
+            if first_background.right() < 0 {
+                first_background.set_x(second_background.right());
+            }
+            if second_background.right() < 0 {
+                second_background.set_x(first_background.right());
+            }
+
+            walk.obstacles.retain(|obstacle| obstacle.right() > 0);
+
+            walk.obstacles.iter_mut().for_each(|obstacle| {
+                obstacle.move_horizontally(velocity);
+                obstacle.check_intersection(&mut walk.boy);
+            });
+
+            if walk.timeline < TIMELINE_MINIMUM {
+                walk.generate_next_segment();
+            } else {
+                walk.timeline += velocity;
+            }
         }//^-- if let
     }//^-- fn update
+*/
 
+    fn update(&mut self, keystate: &KeyState) {
+        if let WalkTheDog::Loaded(walk) = self {
+            if keystate.is_pressed("ArrowRight") {
+                walk.boy.run_right();
+            }
+
+            if keystate.is_pressed("Space") {
+                walk.boy.jump();
+            }
+
+            if keystate.is_pressed("ArrowDown") {
+                walk.boy.slide();
+            }
+
+            walk.boy.update();
+
+            let velocity = walk.velocity();
+            let [first_background, second_background] = &mut walk.backgrounds;
+            first_background.move_horizontally(velocity);
+            second_background.move_horizontally(velocity);
+
+            if first_background.right() < 0 {
+                first_background.set_x(second_background.right());
+            }
+            if second_background.right() < 0 {
+                second_background.set_x(first_background.right());
+            }
+
+            walk.obstacles.retain(|obstacle| obstacle.right() > 0);
+
+            walk.obstacles.iter_mut().for_each(|obstacle| {
+                obstacle.move_horizontally(velocity);
+                obstacle.check_intersection(&mut walk.boy);
+            });
+
+            if walk.timeline < TIMELINE_MINIMUM {
+                walk.generate_next_segment();
+            } else {
+                walk.timeline += velocity;
+            }
+        }
+    }
+
+
+    fn draw(&self, renderer: &Renderer) {
+        renderer.clear(&Rect::new(Point { x: 0, y: 0 }, 600, HEIGHT));
+
+        if let WalkTheDog::Loaded(walk) = self {
+            walk.backgrounds.iter().for_each(|background| {
+                background.draw(renderer);
+            });
+            walk.boy.draw(renderer);
+
+            walk.obstacles.iter().for_each(|obstacle| {
+                obstacle.draw(renderer);
+            });
+        }
+    }
+/*
     fn draw(&self, renderer: &Renderer) {
         renderer.clear(&Rect {
             x: 0, 
@@ -998,17 +1145,42 @@ impl Game for WalkTheDog {
             
             walk.platform.draw_rect(renderer);
 
+            /* SHOULD BE IN UPDATE
             // removing an obstacle from the obstacles
             // Vec when they go off screen            
             walk.obstacles.retain(|obstacle|
                 obstacle.right() > 0);
-
+ */
             // move and collide with the obstacles
             walk.obstacles.iter().for_each(|obstacle| {
                 obstacle.draw(renderer);
             });
-            
+           
         }
     }
-}
+*/
+/*
+    fn draw(&self, renderer: &Renderer) {
+        renderer.clear(&Rect::new(Point { x: 0, y: 0 }, 600, HEIGHT));
 
+        if let WalkTheDog::Loaded(walk) = self {
+            walk.backgrounds.iter().for_each(|background| {
+                background.draw(renderer);
+            });
+            walk.boy.draw(renderer);
+
+            walk.obstacles.iter().for_each(|obstacle| {
+                obstacle.draw(renderer);
+            });
+        }
+    }
+*/
+} //^-- impl Game for WalkTheDog
+
+fn rightmost(obstacle_list: &Vec<Box<dyn Obstacle>>) -> i16 {
+    obstacle_list
+        .iter()
+        .map(|obstacle| obstacle.right())
+        .max_by(|x, y| x.cmp(&y))
+        .unwrap_or(0)
+}
