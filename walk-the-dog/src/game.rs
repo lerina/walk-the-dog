@@ -7,6 +7,7 @@ use self::red_hat_boy_states::*;
 use crate::{
     browser,
     engine::{self, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet},
+    segments::stone_and_platform,
 };
 
 const HEIGHT: i16 = 600;
@@ -864,8 +865,6 @@ impl Game for WalkTheDog {
                 let rhb = RedHatBoy::new(sheet, engine::load_image("../resources/pix/rhb.png").await?);
                 let background = engine::load_image("../resources/pix/BG.png").await?;
                 let stone = engine::load_image("../resources/pix/Stone.png").await?;
-                // change of name
-                // let platform_sheet = browser::fetch_json("../resources/pix/tiles.json").await?;
                 let tiles = browser::fetch_json("../resources/pix/tiles.json").await?;
 
                 let sprite_sheet = Rc::new(SpriteSheet::new(
@@ -873,23 +872,6 @@ impl Game for WalkTheDog {
                                     engine::load_image("tiles.png").await?,
                                    ));
                 
-                /*
-                let platform = Platform::new(  
-                                   SpriteSheet::new(platform_sheet.into_serde::<Sheet>()?,
-                                                    engine::load_image("../resources/pix/tiles.png").await?, 
-                                                  ),
-                                    Point { x: 200, y: 400 },
-                               );        
-                */
-                /*
-                let platform = Platform::new(
-                                    sprite_sheet.clone(),
-                                    Point {
-                                        x: FIRST_PLATFORM,
-                                        y: LOW_PLATFORM,
-                                    },
-                                );
-                */
                 let platform = Platform::new(
                                 sprite_sheet.clone(),
                                 Point {
@@ -908,18 +890,14 @@ impl Game for WalkTheDog {
                                     Image::new( background, Point { x: background_width, y: 0,},),
                                   ];
 
-
+                /*
                 let obstacles = vec![ Box::new(Barrier::new(
                                                  Image::new( stone, Point { x: 150, y: 546 }))),
                                       Box::new(platform),
                                             ];
-
-                /*
-                let walk = Walk {   boy: rhb, 
-                                    backgrounds: backgrounds,
-                                    obstacles: obstacles,
-                                };                
                 */
+                let obstacles = stone_and_platform(stone, sprite_sheet.clone(), 0);
+
                 let walk = Walk {   boy: rhb, 
                                     backgrounds: backgrounds,
                                     obstacles: obstacles,
