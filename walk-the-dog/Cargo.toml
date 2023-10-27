@@ -21,7 +21,7 @@ wasm-bindgen-futures = "0.4.37"
 serde = {version = "1.0.188", features = ["derive"] }
 anyhow = "1.0.75"
 async-trait = "0.1.73"
-
+js-sys = "0.3.64"
 
 
 
@@ -30,17 +30,23 @@ async-trait = "0.1.73"
 [dependencies.web-sys]
 version = "0.3.64"
 features = ["console",
-           "Window",
-           "Document",
-           "HtmlCanvasElement",
-           "CanvasRenderingContext2d",
-           "Element", 
-           "HtmlImageElement",
-           "Response", 
-           "Performance",
-           "KeyboardEvent",]
+            "Window",
+            "Document",
+            "HtmlCanvasElement",
+            "CanvasRenderingContext2d",
+            "Element", 
+            "HtmlImageElement",
+            "Response", 
+            "Performance",
+            "KeyboardEvent",
+            "AudioContext",
+            "AudioBuffer",
+            "AudioBufferSourceNode",
+            "AudioDestinationNode",
+           ]
+          
 
 # These crates are used for running unit tests.
 [dev-dependencies]
 wasm-bindgen-test = "0.3.37"
-js-sys = "0.3.64"
+#js-sys = "0.3.64"

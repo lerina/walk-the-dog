@@ -1,682 +1,550 @@
-## Creating a dynamic level
+## Sound Effects and Music
 
-The initial screen we've been looking at for so long, with RHB jumping from a stone onto
-a platform, is what we're going to call a "*segment*." 
-It's not a technical term, just a concept we've made up for the sake of generating them. 
-As RHB moves to the right (that is, when all the obstacles move to the left), 
-we'll generate new segments to the right, which is just off screen. 
-We'll create these as segments so that we can control what is generated and how they fit together. 
+While our game may be playable, it's just not a game without some sound. 
+To play sound in our game, we'll need to learn how to use the browser's 
+`Web Audio API` for both short and long sounds.
 
-Think of it like this: if we generated obstacles at random, then our platforms would look messy 
-and would arrange themselves in an unbeatable fashion, like so:
+In this chapter, we will cover the following topics:
 
-![A truly random level](./readme_pix/truly_random.png)
+• Adding the Web Audio API to the engine
+• Playing sound effects
+• Playing long music
+
+By the end of this chapter, you won't just see RHB run, jump, and dodge obstacles,
+but you'll be able to hear him too after we add sound effects and music to our game.
+
+Let's get started!
+
+### Adding the Web Audio API to the engine
+
+We'll be using the browser's Web Audio API to add sound to our game.
+The API is incredibly full-featured, allowing for mixing audio sources and special effects,
+but we're just going to use it to play background music and sounds. In fact, the Web
+Audio API is its own book and, if you're interested, you can [find one at ](https://
+webaudioapi.com/book/) .
 
 
-Instead, what we'll do is create a segment where the first one looks exactly like our one
-platform and one rock, and have them string together via a "*timeline*" value that's stored
-in `Walk`. 
+Once we've got an overview of the Web Audio API, we'll create a module to play sounds in
+Rust, load the sounds in the same way as we load our images, and finally, add that sound
+to the engine.
 
-This `timeline` will represent the right-hand side of the last segment in `x`. 
-As that value gets closer to the edge of the screen, we'll generate another new `segment` 
-and move the `timeline` back out. 
+The Web Audio API may initially look familiar when compared to Canvas. As with
+Canvas, you create a context that then provides an API for playing sounds. At that point,
+the similarity ends. Because the Web Audio API has all the features I mentioned earlier, it
+can be hard to figure out how to do the basic act of playing a sound. Unlike Canvas, there's
+no drawImage equivalent called playSound or something like that. Instead, you have
+to get the sound data, create AudioBufferSourceNode , connect it to a destination,
+and then finally start it.
 
-With this approach, `RHB` will be able to run for as long as we like, and we will have the freedom 
-of a level designer. We will be able to create segments that are both easy and hard to navigate, 
-though we'll need to make sure they all interlock and can be beaten. 
-This is the fun part!
+In JavaScript, the code to load and prepare
+a sound for playback looks like the following:
 
-### Creating one segment
+```javascript
+// if we did it in javascript it would be like this:
 
-We'll start by taking the introductory screen and creating it as a `segment`. 
-Let's do this by creating a new file called `segments.rs`, 
-making sure to add `mod segments` to the `lib.rs` file. 
-This module isn't created for the typical software design reasons; 
-usually, it's because `game.rs` is getting pretty long 
-and these segments are closer to being levels than they are true code.
+const audioContext = new AudioContext();
+let sound = await fetch("SFX_Jump_23.mp3");
+let soundBuffer = await sound.arrayBuffer();
+let decodedArray = await audioContext.
+decodeAudioData(soundBuffer);
+```
+
+It starts by creating a new AudioContext , which is built into the browser engine, then
+fetching a sound file from the server. The fetch call eventually returns a response, which
+we'll need to decode. We do this by first getting its arrayBuffer , which consumes it,
+and then we use the audioContext we created at the beginning to decode the buffer
+into a sound that can be played. 
+
+Note how everything is asynchronous, which will cause us a little trouble 
+in the Rust code as we map JavaScript promises to Rust futures.
+
+The previous code should only be done once for any sound resource since loading 
+and decoding the file can take significant time.
+
+The following code will play a sound:
+
+```javascript
+// if we did it in javascript it would be like this:
+
+let trackSource = audioContext.createBufferSource();
+trackSource.buffer = decodedArray;
+trackSource.connect(audioContext.destination);
+trackSource.start();
+```
+
+Ugh, that's not intuitive, but it's what we have. Fortunately, we can wrap it in a few
+simple functions that we'll be able to remember, and forget all about it. 
+
+It creates the `AudioBufferSourceNode` we need with `createBufferSource`, assigns it
+the array that we decoded into audio data in the previous section, connects it to the
+audioContext , and finally, plays the sound with start. 
+It's important to know that you cannot call start on `trackSource` twice, 
+but fortunately, the creation of a buffer source is very fast and won't require us to cache it.
+
+
+That's great! We know the eight lines of code to play a sound in JavaScript, but how do we
+get this into our engine?
+
+### Playing a sound in Rust
+
+We're going to create a sound module that's very similar to our browser module,
+a series of functions that just delegate right to the underlying JavaScript. It will be a very
+bottom-up approach, where we'll create our utility functions and then create the final
+functions that use them. We'll start by focusing on the parts we need for a play_sound
+function.
+
+
+Note:
+
+Remember that you want these functions to be very small – it's a thin layer
+between Rust and JavaScript – but also to change the interface to better match
+what you want to do. So, eventually, rather than talking about buffer sources
+and contexts, we'll want to call that play_sound function we wish existed in
+the first place.
+
+We'll start by creating the module in a file named `sound.rs` living alongside the rest of
+our modules in src. 
 
 ```sh
-$ touch src/segments.rs
+$ touch src/sound.rs
 ```
+
+Don't forget to add a reference to it in src/lib.rs , as shown here:
 
 ```rust
 // src/lib.rs
 
-...
+#[macro_use]
+mod browser;
+mod engine;
 mod game;
 mod segments;
-...
-use engine::GameLoop;
-...
+mod sound;
+
+....
 ```
 
-Each segment will be a function that returns a list of obstacles. Let's create a public
-function in segments.rs that returns the same list that the game is initialized with:
-
+Our first function will create an `AudioContext` in a Rusty way 
+as opposed to the JavaScript way we already saw, and that's as follows:
 
 ```rust
-// src/segments.rs
+// src/sound.rs
 
-pub fn stone_and_platform( 
-            stone: HtmlImageElement, 
-            sprite_sheet: Rc<SpriteSheet>, 
-            offset_x: i16, ) -> Vec<Box<dyn Obstacle>> {
+use anyhow::{anyhow, Result};
+use web_sys::AudioContext;
 
-        const INITIAL_STONE_OFFSET: i16 = 150;
-        vec![
-            Box::new(Barrier::new(Image::new(
-                stone,
-                Point {
-                    x: offset_x + INITIAL_STONE_OFFSET,
-                    y: STONE_ON_GROUND,
-                },
-            ))),
-            Box::new(create_floating_platform(
-                sprite_sheet,
-                Point {
-                    x: offset_x + FIRST_PLATFORM,
-                    y: LOW_PLATFORM,
-            },
-            )),
-        ]
+pub fn create_audio_context() -> Result<AudioContext> {
+    AudioContext::new().map_err(|err| anyhow!("Could not create audio context: {:#?}", err))
 }
 
 ```
 
-Look, constants! 
-We want the segments module to look as data-driven as possible, 
-so we'll be using constants throughout this file. 
+As usual, the Rust version of the code is more verbose than the JavaScript version. 
 
-This section of code doesn't compile because the `create_floating_platform` function doesn't exist yet, 
-but it does the same things that the corresponding code in the `initialize` method of `WalkTheDog` does. 
-The only differences are that it uses the `create_floating_platform` function, which
-doesn't exist, and some constants that also do not exist.
+That's the price we pay for the positives of Rust. 
+None of this code is particularly new; we're mapping `new AudioContext` to `AudioContext::new`, 
+and we're mapping the `JsResult` error to an `anyhow` result that it might return, to be more Rust-friendly.
 
-The function itself takes `HtmlImageElement` from `stone` and `Rc<SpriteSheet>`
-to create `Barrier` and `Platform`, respectively, but it also takes an `offset_x`
-value. 
-That's because while the first `Barrier` and `Platform` may be at 150 and
-200, respectively, in the future, we'll want those to be that many pixels away from the
-`timeline`. 
+This code doesn't compile though; take a moment and think about why. 
 
-It returns a vector of `obstacles`, which we can use in the `initialize` method of
-`WalkTheDog` and anywhere else that we generate segments.
+It's the infamous feature flags for web-sys in Cargo.toml that we haven't added `AudioContext` to, 
+so let's add that now:
 
+```toml
+[dependencies.web-sys]
+version = "0.3.64"
+features = ["console",
+            "Window",
+            "Document",
+            "HtmlCanvasElement",
+            "CanvasRenderingContext2d",
+            "Element",
+            "HtmlImageElement",
+            "Response",
+            "Performance",
+            "KeyboardEvent",
+            "AudioContext",
+            ]
+```
 
-Information::
-        
-        You may have noticed that we used an Rc for SpriteSheet but just take
-        ownership of HtmlImageElement , which may need to be cloned when it's
-        called. Nice catch! You may wish to consider making HtmlImageElement
-        an Rc as well. HtmlImageElement is small enough that it's probably
-        fine if we clone it, but it may be worth investigating in Chapter 9,
-        Testing, Debugging, and Performance.
-        
+Now that we've set up the sound module, created the function to create `AudioContext`,
+and refreshed our memory on the process of adding a new feature to the web-sys
+dependency, we can go ahead and add a little more code to play sounds. 
 
-Let's continue by creating the function that's missing – that is, 
-`create_floating_platform`:
+Let's introduce all the remaining feature flags you'll need to add to web-sys in Cargo.toml:
+
+```toml
+[dependencies.web-sys]
+version = "0.3.64"
+features = ["console",
+            ...
+            "AudioContext",
+            "AudioBuffer",
+            "AudioBufferSourceNode",
+            "AudioDestinationNode",
+            ]
+```
+The three features, `AudioBuffer`, `AudioBufferSourceNode`, and
+`AudioDestinationNode`, correspond to those same objects in the original
+JavaScript code. 
+For instance, 
+the `let trackSource = audioContext.createBufferSource();` function returned `AudioBufferSourceNode`. 
+
+The `web-sys` authors have chosen to hide a large number of `audio` features under individual flags, 
+so we need to name them one at a time.
+
+Now that we have the features ready, we can add the rest of the code. 
+Back in the sound module, the code will look like this:
 
 
 ```rust
-// src/segments.rs
+// src/sound.rs
 
-fn create_floating_platform(sprite_sheet: Rc<SpriteSheet>, 
-                            position: Point) -> Platform {
-    Platform::new(
-        sprite_sheet,
-        position,
-        &FLOATING_PLATFORM_SPRITES,
-        &FLOATING_PLATFORM_BOUNDING_BOXES,
-    )
+use anyhow::{anyhow, Result};
+use web_sys::{AudioBuffer, AudioBufferSourceNode, AudioContext,
+              AudioDestinationNode, AudioNode};
+
+...
+fn create_buffer_source(ctx: &AudioContext) -> Result<AudioBufferSourceNode> {
+    ctx.create_buffer_source()
+            .map_err(|err| anyhow!("Error creating buffer source {:#?}", err))
 }
 
+fn connect_with_audio_node( buffer_source: &AudioBufferSourceNode,
+                            destination: &AudioDestinationNode,
+                          ) -> Result<AudioNode> {
+
+    buffer_source.connect_with_audio_node(&destination)
+                 .map_err(|err| anyhow!("Error connecting audio source to destination {:#?}", err))
+}
 ```
 
-This is a pretty small function in that it just delegates to the `Platform` constructor 
-and passes along important information. 
-As you can see, there are two new constants to go along with the others in `stone_and_platform`.
+In this book, we've typically gone through the code one function at a time, 
+but for these two it's not necessary. 
+These functions correspond to the calls to `audioContext.createBufferSource` 
+and `trackSource.connect(audioContext.destionation)` respectively. 
 
+We've converted the code from the object-oriented style of JavaScript 
+into a slightly more procedural format with the functions taking parameters,
+in part so that we can map errors from the `JsValue` types into proper Rust Error types
+via the `anyhow!` macro.
 
-Tip::
-        
-    If you want to use `Rect::new_from_x_y` when you're declaring
-    `FLOATING_PLATFORM_BOUNDING_BOXES`, you'll need to declare it 
-    and `Rect::new` as `pub const fn`.
-
-
-The rest of the segments module consists of constants and use statements. 
-You can infer the values for all the constants from the code we used earlier, 
-or just check out https://github.com/PacktPublishing/Game-Development-with-Rust-
-and-WebAssembly/blob/chapter_6/src/segments.rs . 
-By putting all the values in constants, the code looks increasingly data-driven, 
-with functions just returning the data we want for every segment.
-
-```rust
-// src/segments.rs
-use std::rc::Rc;
-use web_sys::HtmlImageElement;
-
-
-use crate::game::{Barrier, Obstacle, Platform};
-use crate::engine::{Image, Point, Rect, SpriteSheet};
-
-const LOW_PLATFORM: i16 = 420;
-const HIGH_PLATFORM: i16 = 375;
-const FIRST_PLATFORM: i16 = 370;
-const STONE_ON_GROUND: i16 = 546;
-
-const FLOATING_PLATFORM_SPRITES: [&str; 3] = ["13.png", "14.png", "15.png"];
-const PLATFORM_WIDTH: i16 = 384;
-const PLATFORM_HEIGHT: i16 = 93;
-const PLATFORM_EDGE_WIDTH: i16 = 60;
-const PLATFORM_EDGE_HEIGHT: i16 = 54;
-const FLOATING_PLATFORM_BOUNDING_BOXES: [Rect; 3] = [
-    Rect::new_from_x_y(0, 0, PLATFORM_EDGE_WIDTH, PLATFORM_EDGE_HEIGHT),
-    Rect::new_from_x_y(
-        PLATFORM_EDGE_WIDTH,
-        0,
-        PLATFORM_WIDTH - (PLATFORM_EDGE_WIDTH * 2),
-        PLATFORM_HEIGHT,
-    ),
-    Rect::new_from_x_y(
-        PLATFORM_WIDTH - PLATFORM_EDGE_WIDTH,
-        0,
-        PLATFORM_EDGE_WIDTH,
-        PLATFORM_EDGE_HEIGHT,
-    ),
-];
-
-
-```
-    
-Once you've filled in the constants and the use statements, 
-you can use the new `stone_and_platform` function in the `initialize` method of `WalkTheDog`. 
-Yeah, that one again. 
-Let's replace the hardcoded list of obstacles with a call to this new function:
+Now that we have the three functions, we need to play a sound. We can go ahead and
+write the function that plays it right below them, shown here:
 
 
 ```rust
-// src/game.rs
+// src/sound.rs
+
+...
+pub fn play_sound(ctx: &AudioContext, buffer: &AudioBuffer) -> Result<()> {
+    let track_source = create_buffer_source(ctx)?;
+    track_source.set_buffer(Some(&buffer));
+    connect_with_audio_node(&track_source, &ctx.destination())?;
+
+    track_source
+       .start()
+       .map_err(|err| anyhow!("Could not start sound!{:#?}", err))
+}
+```
+
+The `play_sound` function accepts `AudioContext` and `AudioBuffer` as parameters,
+then returns the result of the start call, with `JsValue` mapped to `Error`. 
+
+We haven't created an `AudioBuffer` yet anywhere, so don't worry that you don't know how to
+as we'll cross that bridge when we come to it. 
+
+What we have here is a function that is very similar to the original JavaScript for playing a sound, 
+but with the additional error handling that comes with Rust, including using the `?` operator 
+to make it easier to read, and a little bit of additional work around `None` in the `track_source`.
+
+`set_buffer(Some(&buffer));` line, where we need to wrap a reference to
+`AudioBuffer` in `Some` because `track_source` has an *optional buffer*. 
+In JavaScript, this is null or undefined, but in Rust, we need to use the `Option` type. 
+
+Otherwise, both the JavaScript and Rust versions do the same thing to play a sound:
+
+1. Create `AudioBufferSource` from `AudioContext`.
+2. Set `AudioBuffer` on the source.
+3. Connect `AudioBufferSource` to the `AudioContext` destination.
+4. Call `start` to play the sound.
 
 
-#[async_trait(?Send)]
-impl Game for WalkTheDog {
-    async fn initialize(&self) -> Result<Box<dyn Game>> {
-        match self {
-            WalkTheDog::Loading => {
-                ...
-                /*
-                let obstacles = vec![ Box::new(Barrier::new(
-                                                 Image::new( stone, Point { x: 150, y: 546 }))),
-                                      Box::new(platform),
-                                            ];
-                */
-                let obstacles = stone_and_platform(stone, sprite_sheet.clone(), 0);
+This seems like a lot, but in reality, it's very fast, so there's not much use in caching
+`AudioBufferSource`, especially since you can only call start once. Now that we
+can play a sound, it's time to load a sound resource and decode it, so that we have an
+`AudioBuffer` to play. 
+
+Let's do that now.
+
+### Loading the sound
+
+To load a sound from the server, we'll need to translate the following code, which you've
+already seen, into Rust.
+
+```javascript
+// if we did it in javascript it would be like this:
+
+const audioContext = new AudioContext();
+let sound = await fetch("SFX_Jump_23.mp3");
+let soundBuffer = await sound.arrayBuffer();
+let decodedArray = await audioContext.
+decodeAudioData(soundBuffer);
 ```
 
 
-Make sure you bring in scope stone_and_platform from segments! 
+Fetching the resource is something we can already do in our browser module, but we
+don't have a handy way to get its `arrayBuffer`, so we'll need to add that. 
 
+We'll also need to create a Rust version of `decodeAudioData`. 
 
-```rust
-// src/game.rs
+Let's start with the changes we need to add to browser, 
+which are modifications to existing methods. 
 
-use crate::{
-    browser,
-    engine::{self, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet},
-    segments::stone_and_platform,
-};
-
-```
-
-NOTE::
-        You may have noticed that this puts a circular dependency between segments
-        and game . You're right. To fix this, take anything that segments depends on
-        that is in game and put it in another module that both game and segments
-        depend on. This has been left as an exercise for you.
-
-Sticking with the book's source code for now. We risk to be too much out of sync to make sense of the rest of the book as it has multiple gaps and omissions making following the code a little more challenging 
-
-Now that we've got a function to create the initial scene, 
-we can add a timeline and start generating scenes again and again. 
-Let's get started.
-
-### Adding a timeline
-
-We need to `initialize` the `timeline` at the `width` of a `segment`. 
-We can calculate this by finding the right-most point in the list of obstacles, 
-and we'll use those cool functional constructs we used earlier. 
-This will be a standalone function that we can keep in the `game` module, 
+We'll want to split the old fetch_json function, 
 which looks like this:
 
 
 ```rust
-// src/game.rs
+// src/browser.rs
 
+pub async fn fetch_json(json_path: &str) -> Result<JsValue> {
+    let resp_value = fetch_with_str(json_path).await?;
+    let resp: Response = resp_value
+        .dyn_into()
+        .map_err(|element| anyhow!("Error converting {:#?} to Response", element))?;
 
-fn rightmost(obstacle_list: &Vec<Box<dyn Obstacle>>) -> i16 {
-    obstacle_list
-        .iter()
-        .map(|obstacle| obstacle.right())
-        .max_by(|x, y| x.cmp(&y))
-        .unwrap_or(0)
+    JsFuture::from(
+        resp.json()
+            .map_err(|err| anyhow!("Could not get JSON from response {:#?}", err))?,
+    )
+    .await
+    .map_err(|err| anyhow!("error fetching JSON {:#?}", err))
 }
 ```
 
-This function goes through a vec of `Obstacle` and gets its `right` value. 
-Then, it uses the `max_by` function to figure out the maximum value on the `right`. 
-Finally, it uses `unwrap_or` because while `max_by` can technically return `None`, 
-if it does that here, then we have completely screwed up 
-and may as well shove all the graphics onto the leftmost part of the screen. 
+We need to split it into two functions that 
+- first fetch `Result<Response>`, 
+- then a second that converts it into JSON
 
-Now that we have this function, we can add a `timeline` value to the `Walk` struct.
-We also added a reference to HtmlImageElement because we'll need that later:
 
 ```rust
-// src/game.rs
+// src/browser.rs
 
-pub struct Walk {
-    obstacle_sheet: Rc<SpriteSheet>,
-    boy: RedHatBoy,
-    backgrounds: [Image; 2],
-    obstacles: Vec<Box<dyn Obstacle>>,
-    
-    stone: HtmlImageElement,
-    timeline: i16,
+pub async fn fetch_response(resource: &str) -> Result<Response> {
+    fetch_with_str(resource)
+                        .await?
+                        .dyn_into()
+                        .map_err(|err| anyhow!("error converting fetch to Response {:#?}", err))
 }
 
 
-```
-
-We will now initialize Walk – yes, we're back in that function again – with stone and
-timeline. 
-
-We'll have to tweak the code slightly to deal with the borrow checker:
-
-
-```rust
-// src/game.rs
-
-
-#[async_trait(?Send)]
-impl Game for WalkTheDog {
-    async fn initialize(&self) -> Result<Box<dyn Game>> {
-        match self {
-            WalkTheDog::Loading => {
-                ...
-
-                //let obstacles = stone_and_platform(stone, sprite_sheet.clone(), 0);
-                let starting_obstacles = stone_and_platform(stone.clone(), sprite_sheet.clone(), 0);
-                let timeline = rightmost(&starting_obstacles);
-
-                let walk = Walk {   boy: rhb, 
-                                    backgrounds: backgrounds,
-                                    obstacles: starting_obstacles, // obstacles,
-                                    obstacle_sheet: sprite_sheet,
-
-                                    stone: stone, 
-                                    timeline: timeline,
-                                };
-```
-
-Here, we bind `starting_obstacles` and `timeline` before we initialize `Walk` 
-since we wouldn't be able to get `timeline` as we've moved `obstacles` already. 
-Note how we now clone `stone` when we pass it into `stone_and_platform`. 
-We'll need to do this from now on because each `Barrier` obstacle owns an `Image` and, 
-ultimately, its `HtmlImageElement`. 
-Finally, we pass `stone` and `timeline` into the `Walk` struct.
-
-Now that we have a `timeline` field we can update it, 
-by moving the rightmost edge of the generated obstacles to the left on each update, 
-and respond to it by generating more obstacles as necessary. 
-
-Our `Canvas` is still 600 pixels wide, so let's say that if there are no
-obstacles at the rightmost point past 1000, we need to generate more.
-
-These changes belong in the `update` method of `WalkTheDog`, at the end of the `update`
-logic:
-
-
-```rust
-// src/game.rs
-
-impl Game for WalkTheDog {
-    ...
-    fn update(&mut self, keystate: &KeyState) {
-        if let WalkTheDog::Loaded(walk) = self {
-            ...
-            walk.obstacles.iter_mut().for_each(|obstacle| {
-                obstacle.move_horizontally(velocity);
-                obstacle.check_intersection(&mut walk.boy);
-            });
-
-
-            if walk.timeline < TIMELINE_MINIMUM {
-                let mut next_obstacles = stone_and_platform(
-                                            walk.stone.clone(),
-                                            walk.obstacle_sheet.clone(),
-                                            walk.timeline + OBSTACLE_BUFFER,
-                                        );
-                walk.timeline = rightmost(&next_obstacles);
-                walk.obstacles.append(&mut next_obstacles);
-            } else {
-                walk.timeline += velocity;
-            }
-            
-
-
-```
-After moving the obstacles, we check whether `walk.timeline is < TIMELINE_MINIMUM`, 
-which is set to 1000 at the top of the module. 
-If it is, we create another `stone_and_platform` segment at `walk.timeline + OBSTACLE_BUFFER`, 
-which is another constant that's set to 20. 
-
-
-```rust
-// src/game.rs
-
-const HEIGHT: i16 = 600;
-const TIMELINE_MINIMUM: i16 = 1000;
-const OBSTACLE_BUFFER: i16 = 20;
-
-```
-
-Why 20? 
-We needed a little buffer to make sure the segments weren't right on top of each other, and 20 seemed fine. 
-You could use a larger number or none at all. 
-
-Then, we update `walk.timeline` to the rightmost point of the new obstacles, 
-and we append those obstacles to the list, ready to be drawn.
-
-If `walk.timeline` is beyond `TIMELINE_MINIMUM`, we simply decrease it by RHB's
-walking `speed` until the next update. 
-Upon adding this code, you should see something similar to the following:
-
-![As one platform ends, another beckons](./readme_pix/next-please.png)
-
-
-
-That's right – you have an endless runner! 
-So, how come we're only halfway through this book? 
-Well, our runner is a little dull, seeing as it only has the same two objects over 
-and over again. 
-
-How about we add some randomness and creativity with multiple segments?
-
-### Creating segments
-
-Creating random segments means using the random library to choose a different segment
-each time one is needed. 
-Let's start by extracting the code we wrote previously into a function, as shown here:
-
-```rust
-// src/game.rs
-
-impl Game for WalkTheDog {
-    ...
-    fn update(&mut self, keystate: &KeyState) {
-        if let WalkTheDog::Loaded(walk) = self {
-            ...
-            if walk.timeline < TIMELINE_MINIMUM {
-                walk.generate_next_segment()
-            } else {
-                walk.timeline += velocity;
-            }
-        }
-        ...
-    }
-}
-
-
-```
-
-And generate_next_segment is in `impl Walk`:
-
-```rust
-// src/game.rs
-
-impl Walk {
-...
-    fn generate_next_segment(&mut self) {
-
-        let mut next_obstacles = stone_and_platform(
-                                    self.stone.clone(),
-                                    self.obstacle_sheet.clone(),
-                                    self.timeline + OBSTACLE_BUFFER,
-                                );
-        self.timeline = rightmost(&next_obstacles);
-        self.obstacles.append(&mut next_obstacles);
-    }//^-- fn generate_next_segment
-}//^-- impl Walk
-
-```
-INFO:
-
-WalkTheDog has a bad case of [feature envy](https://refactoring.guru/smells/feature-envy), 
-another one of those code smells we talked about previously.
-But as this game gets extended, we'll want to move more code out of `WalkTheDog` and into `Walk`.
-
-
-Now that `Walk` can generate the next segment, we'll use the `random` crate from
-Chapter 1, Hello WebAssembly, to choose the next segment. 
-
-Of course, we only have one segment, so that won't mean much. 
-It looks like this:
-
-```rust
-// src/game.rs
-
-impl Walk {
-    ...
-    fn generate_next_segment(&mut self) {
-        let mut rng = thread_rng();
-        let next_segment = rng.gen_range(0..1);
-        
-        let mut next_obstacles = match next_segment {
-            0 => stone_and_platform(
-                self.stone.clone(),
-                self.obstacle_sheet.clone(),
-                self.timeline + OBSTACLE_BUFFER,
-                ),
-            _ => vec![],
-        };
-
-        self.timeline = rightmost(&next_obstacles);
-        self.obstacles.append(&mut next_obstacles);
-
-    }//^-- fn generate_next_segment
-}//^-- impl Walk
-
-```
-
-also add
-
-```rust
-// src/game.rs
-
-...
-use rand::{thread_rng, Rng};
-//use rand::prelude::*;
-```
-
-Don't forget to add `use rand::prelude::*;` at the top of the file. 
-This generates a random number between 0 and, well, 0. 
-Then, it matches that value and generates the selected segment, 
-which in this case will always be stone_and_platform . 
-There's a default case here, but that's just to quiet the compiler – it can't happen. 
-I'll create a second segment called `platform_and_stone` that is the same as the first one 
-except it flips the position of stone and platform, and then puts the platform higher 
-by using the `HIGH_PLATFORM` constant we created earlier. 
-
-Now, the `generate_next_segment` function looks like this:
-
-
-```rust
-// src/game.rs
-
-impl Walk {
-    ...
-    fn generate_next_segment(&mut self) {
-        let mut rng = thread_rng();
-        let next_segment = rng.gen_range(0..2);
-
-        let mut next_obstacles = match next_segment {
-            0 => stone_and_platform(
-                self.stone.clone(),
-                self.obstacle_sheet.clone(),
-                self.timeline + OBSTACLE_BUFFER,
-            ),
-            1 => platform_and_stone(
-                self.stone.clone(),
-                self.obstacle_sheet.clone(),
-                self.timeline + OBSTACLE_BUFFER,
-            ),
-            _ =>vec![],
-        };
-
-        self.timeline = rightmost(&next_obstacles);
-        self.obstacles.append(&mut next_obstacles);
-
-    }//^-- fn generate_next_segment
-}//^-- impl Walk
-
-
-```
-
-In `segments.rs` we add:
-
-```rust
-// src/segments.rs
-
-...
-const HIGH_PLATFORM: i16 = 375;
-...
-
-pub fn platform_and_stone(
-    stone: HtmlImageElement,
-    sprite_sheet: Rc<SpriteSheet>,
-    offset_x: i16,
-) -> Vec<Box<dyn Obstacle>> {
-    const INITIAL_STONE_OFFSET: i16 = 400;
-    const INITIAL_PLATFORM_OFFSET: i16 = 200;
-
-    vec![
-        Box::new(Barrier::new(Image::new(
-            stone,
-            Point {
-                x: offset_x + INITIAL_STONE_OFFSET,
-                y: STONE_ON_GROUND,
-            },
-        ))),
-        Box::new(create_floating_platform(
-            sprite_sheet,
-            Point {
-                x: offset_x + INITIAL_PLATFORM_OFFSET,
-                y: HIGH_PLATFORM,
-            },
-        )),
-    ]
+pub async fn fetch_json(json_path: &str) -> Result<JsValue> {
+    let resp = fetch_response(json_path).await?;
+    JsFuture::from( resp.json()
+                        .map_err(|err| anyhow!("Could not get JSON from response {:#?}", err))?,
+    )
+    .await
+    .map_err(|err| anyhow!("error fetching JSON {:#?}", err))
 }
 
 ```
 
-Here, you can see that I get two segments, both of which are called in the same way.
-Make sure gen_range now generates a number from 0 to 2. 
-Upon running this code, I get to see a new segment:
+This is a classic case of the second person pays for abstraction, where we wrote the code we
+needed in Chapter 2, Drawing Sprites, to load JSON, but now we need a version of fetch
+that can handle multiple kinds of responses, specifically, sound files that will be accessible
+as an `ArrayBuffer` instead. 
+That code will need `fetch_response` but will convert it into a different object. 
 
-If you try to copy/paste the preceding code, it won't work since you don't have
-`platform_and_stone`. 
-This hasn't been included here because you have all the knowledge you need to create your own segments. 
-You can start by copying/pasting `stone_and_platform` and tweaking its values. 
-Then, you can try creating platforms with the sprite sheet. 
-Remember that you're not limited to just the three images in our sprite sheet. 
-The entire sheet looks like this:
-
-![The sprite sheet](../readme_pix/thespritesheet.png)
-
-
-Nothing will change  until we deal with
-`error[E0015]: cannot call non-const fn `Rect::new_from_x_y` in constants`
+Let's write that code now, right below `fetch_json`:
 
 ```rust
-// src/engine.rs
+// src/sound.rs
 
-/* //This was thebug!!!!
-    // error[E0015]: cannot call non-const fn `Rect::new_from_x_y` in constants
-    pub fn new(position: Point, width: i16, height: i16) -> Self {
-        Rect {
-            position,
-            width,
-            height,
-        }
-    }
+...
 
-    pub fn new_from_x_y(x: i16, y: i16, width: i16, height: i16) -> Self {
-        Rect::new(Point { x, y }, width, height)
-    }
-*/
-    pub const fn new(position: Point, width: i16, height: i16) -> Self {
-        Rect {
-            position,
-            width,
-            height,
-        }
-    }
+pub async fn fetch_array_buffer(resource: &str) -> Result<ArrayBuffer> {
+    let array_buffer = fetch_response(resource)
+                        .await?
+                        .array_buffer()
+                        .map_err(|err| anyhow!("Error loading array buffer {:#?}", err))?;
 
-    pub const fn new_from_x_y(x: i16, y: i16, width: i16, height: i16) -> Self {
-        Rect::new(Point { x, y }, width, height)
-    }
+    JsFuture::from(array_buffer)
+                        .await
+                        .map_err(|err| anyhow!("Error converting array buffer into a future {:#?}", err))?
+                        .dyn_into()
+                        .map_err(|err| anyhow!("Error converting raw JSValue to ArrayBuffer {:#?}", err))
+}
+```
 
+Just as `fetch_json` does, this starts by calling `fetch_response` with the passed-in
+resource. Then, it calls the `array_buffer()` function on that response, which will
+return a promise that resolves to `ArrayBuffer`. 
+Then, we convert from a promise to `JsFuture` as usual, in order to use the await syntax. 
+Finally, we call `dyn_into` to convert the `JsValue` that all Promise types return into `ArrayBuffer`. 
+
+I've skipped over it, but at each step, we use `map_err` to convert the `JsValue` errors into `Error` types.
+
+
+The `ArrayBuffer` type is a JavaScript type that isn't available to our code yet. It's a core
+JavaScript type, defined in the `ECMAScript` standard, and in order to use it directly, we
+need to add the `js-sys` crate. 
+
+This is somewhat surprising, as we are already pulling in `wasm-bindgen` and `web-sys`, 
+which are both dependent on JavaScript, so why do we need to pull in yet another crate for `ArrayBuffer`? 
+
+This has to do with how the various crates are arranged. 
+The `web-sys` crate **has all the web APIs** 
+where `js-sys` is limited to code that is in the `ECMAScript` standard. 
+
+Up to now, we haven't had to use anything in core JavaScript except what was exposed by web-sys, but this changes with ArrayBuffer.
+
+In order for this code to compile, you'll need to add `js-sys = "0.3.64"`
+
+It is already in dev-dependencies , so you can just
+move it from there. 
+
+```toml
+...
+[dependencies]
+wasm-bindgen = { version = "0.2.87", features = ["serde-serialize"] }
+...
+js-sys = "0.3.64"
+
+...
+
+# These crates are used for running unit tests.
+[dev-dependencies]
+wasm-bindgen-test = "0.3.37"
+#js-sys = "0.3.64"
 
 ```
- 
-You can use this to make larger platforms, steps, and even cliffs. Try making a few
-different shapes. Try making smaller platforms by skipping the middle tile in the platform
-we've been using. RHB can slide; can you make something for him to slide under?
 
-For a real challenge, take a look at the water sprites. Currently, RHB can't fall through the
-ground since we're using a FLOOR variable, but what if we didn't? Could RHB drown? Fall
-off a cliff, perhaps? It's time to become a game designer!
+You'll also need to add a use js_sys::ArrayBuffer declaration
+to bring into scope the ArrayBuffer struct .
 
+```rust
+// src/browser.rs
+...
+use js_sys::ArrayBuffer;
 
+...
 
-Note: I tried to be too clever with my
-build script and end up losing time because things did not really update. 
-and old stale files ended up being served hiding the fact that something went wrong with the new modifications.
- 
-We need to remove old pkg. Sometimes things don't update after modifications.
-`rm -fr www/pkg`
-
-Also although stopping at the first error is convenient, we are chaining commands 
-Lets revert to simple things so the run script is like this:
-
-```sh
-#!/bin/sh
-
-## pre-req a web server
-# cargo install http
-
-## exit on error and  prints each executed command
-set -ex
-
-## remove old pkg somethings dont update after modifications
-rm -fr www/pkg
-
-## compile for plain vanilla no javascript framework 
-wasm-pack build --target web --out-dir www/pkg  
-#--color=always 2>&1 | less -R
-
-## display link for easy access
-echo "Serving at: http://127.0.0.1:8080/html/"
-
-## run the web server
-http -a 127.0.0.1 -p 8080 www
 ```
+
+Now that we can fetch a sound file and get it as an `ArrayBuffer`, 
+we're ready to write our version of `await audioContext.decodeAudioData(soundBuffer)`. 
+
+By now, you may have noticed that we're following the same pattern for wrapping every
+JavaScript function like this:
+
+1. Convert any function that returns a promise, such as `decode_audio_data`, 
+into `JsFuture` so you can use it in **asynchronous** Rust code.
+
+2. Map any errors from `JsValue` into your own error types; in this case, we're using
+`anyhow::Result` but you may want more specific errors.
+
+3. Use the `?` operator to propagate errors.
+
+
+4. Check for feature flags, particularly when using `web_sys` and you just know a
+library exists.
+
+To this, we'll add one more step.
+
+5. Cast from `JsValue` types to more specific types using the `dyn_into` function.
+
+Following that same pattern, the Rust version of decodeAudioData goes in the sound
+module, like this:
+
+```rust
+// src/sound.rs
+
+pub async fn decode_audio_data( ctx: &AudioContext, 
+                                array_buffer: &ArrayBuffer,) -> Result<AudioBuffer> {
+
+    JsFuture::from( ctx.decode_audio_data(&array_buffer)
+                       .map_err(|err| anyhow!("Could not decode audio from array buffer {:#?}", err))?,
+                  ).await
+                    .map_err(|err| anyhow!("Could not convert promise to future {:#?}", err))?
+                    .dyn_into()
+                    .map_err(|err| anyhow!("Could not cast into AudioBuffer {:#?}", err))
+}
+
+```
+
+
+You'll need to make sure you add use declarations for `js_sys::ArrayBuffer` and
+`wasm_bindgen_futures::JsFuture`, and also `wasm_bindgen::JsCast` 
+to bring the `dyn_into` function into scope. 
+
+
+```rust
+// src/sound.rs
+...
+use js_sys::ArrayBuffer;
+use wasm_bindgen_futures::JsFuture;
+use wasm_bindgen::JsCast;
+```
+
+Once again instead of directly calling the
+method on `AudioContext`, in this case `decodeAudioData`, we've created a function
+that wraps the call. 
+It borrows a reference to `AudioContext` as the first parameter and takes the `ArrayBuffer` type 
+as the second parameter. 
+
+This allows us to encapsulate the mapping of errors and casting of results into a function.
+
+This function then delegates to `ctx.decode_audio_data`, passing it `ArrayBuffer`,
+but if that's all it did we wouldn't really need it. It then takes any error from 
+`ctx.decode_audio_data` and maps it to `Error` with `anyhow!`; 
+in fact, as you can see,
+it will ultimately do this at every step in the process, pairing that with the `?` operator
+to propagate the error. 
+It takes a promise from `decode_audio_data` and creates `JsFuture` from it, 
+then immediately calls `await` to wait for completion, corresponding to the `await` call in JavaScript. 
+
+After handling any errors converting the promise to `JsFuture`, we use the `dyn_into` function to cast it 
+to `AudioBuffer`, ultimately handling any errors with that as well.
+
+That function is the most complicated of the wrapper functions, so let's reiterate the steps
+we did when translating from one line of JavaScript to nine lines of Rust:
+
+1. Convert any function that returns a promise into `JsFuture` so you can use it in
+asynchronous Rust code.
+In this case, `decode_audio_data` returned a promise, and we converted it into
+`JsFuture` with `JsFuture::from`, then immediately called `await` on it.
+
+2. Map any errors from `JsValue` into your own error type; in this case, we're using
+`anyhow::Result`, but you may want more specific errors.
+We did this three times, as every call seemed to return a `JsValue` version of the
+result, adding clarifying language to the error messages.
+
+3. Cast from `JsValue` types to more specific types using the `dyn_into` function.
+We did this to convert the ultimate result of `decode_audio_data` from
+`JsValue` to `AudioBuffer`, and Rust's compiler could infer the appropriate type
+from the return value of the function.
+
+4. Don't forget to use the `?` operator to propagate errors; note how this function does
+that twice.
+We used the `?` operator twice to make the function easier to read.
+
+5. Check for feature flags, particularly when using `web_sys` and you just know a library exists.
+
+`AudioBuffer` is feature flagged, but we added that back at the beginning.
+This process is a bit more complicated to explain than it is in practice. For the most part,
+you can follow the compiler and use tools such as rust-analyzer to do things such as
+automatically add use declarations.
+
+Now that we've got all the utilities, we need to play a sound. It's time to add that feature to
+the engine module so our game can use it.
+
+
 
 ---------
 
 ```rust
-// src/game.rs
+// src/sound.rs
 
 
 
