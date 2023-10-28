@@ -540,6 +540,112 @@ Now that we've got all the utilities, we need to play a sound. It's time to add 
 the engine module so our game can use it.
 
 
+### Adding audio to the engine
+
+The functions we just created in the sound module could be used by the engine
+directly via delegation functions, but we don't want to make the game worry about
+`AudioContext`, `AudioBuffer`, and things like that. Just like `Renderer`, we'll create
+an `Audio` struct that encapsulates the details of that implementation. 
+
+We'll also create a `Sound` struct to convert `AudioBuffer` into a friendlier type for the rest of the system.
+
+Those will be very small, as shown here:
+
+```rust
+// src/engine.rs
+
+#[derive(Clone)]
+pub struct Audio {
+    context: AudioContext,
+}
+
+#[derive(Clone)]
+pub struct Sound {
+    buffer: AudioBuffer,
+}
+```
+
+These structs are added to the bottom of the engine module, but they can really be put
+anywhere in the file. Don't forget to import `AudioContext` and `AudioBuffer`! 
+
+```rust
+// src/engine.rs
+...
+use web_sys::{AudioContext, AudioBuffer,};
+...
+```
+
+If you're finding yourself getting confused as engine and game get larger, you're welcome
+to break that up into multiple files with a `mod.rs` file and a directory, but to follow along,
+everything needs to end up in the engine module. I'm not going to do that because,
+while it makes the code a bit easier to navigate, it makes it harder to explain and follow
+along with. Breaking it up into smaller chunks later is an excellent exercise to make sure
+you understand the code we're writing.
+
+Now that we have a struct representing `Audio` holding `AudioContext`, and a
+corresponding `Sound` holding `AudioBuffer`, we can add impl to Audio, which uses
+the functions we wrote earlier to play a sound. 
+
+Now, we'll want to add `impl` to the `Audio` struct to play sounds and load them. 
+
+Let's start with the load implementation, which is probably the hardest, 
+as seen here:
+
+
+```rust
+// src/engine.rs
+
+impl Audio {
+    pub fn new() -> Result<Self> {
+        Ok(Audio { context: sound::create_audio_context()?,})
+    }
+
+    pub async fn load_sound(&self, filename: &str) -> Result<Sound> {
+        let array_buffer = browser::fetch_array_buffer(filename).await?;
+        let audio_buffer = sound::decode_audio_data(&self.context, &array_buffer).await?;
+        
+        Ok(Sound { buffer: audio_buffer,})
+    }
+}
+```
+
+
+This `impl` will start with two methods, the familiar new method that creates an `Audio`
+struct with `AudioContext`. Pay attention to the fact that new returns a result in this
+case, because `create_audio_context` can fail. 
+Then, we have the `load_sound` method, which also returns a result, this time of the `Sound` type, 
+which is only three lines. 
+This is a sign we did something right with the way we organized our functions in the sound and browser modules, 
+as we can simply call our `fetch_array_buffer` and `decode_audio_data` functions to get `AudioBuffer` 
+and then wrap it in a `Sound` struct. 
+
+We return a result and propagate errors via `?`. 
+If loading a sound was simple, then playing it is easy in this method on the `Audio` implementation:
+
+```rust
+// src/engine.rs
+
+impl Audio {
+        ...
+
+    pub fn play_sound(&self, sound: &Sound) -> Result<()> {
+        sound::play_sound(&self.context, &sound.buffer)
+    }   
+
+}
+```
+
+For `play_sound`, we really just delegate, passing along `AudioContext` that `Audio`
+holds and `AudioBuffer` from the passed-in sound.
+
+We've written a module to play sounds in the API, added loading sounds to the browser,
+and finally created an audio portion of our game engine. That's enough to play a sound
+effect in the engine; 
+
+now we need to add it to our game, and here it's going to get complicated.
+
+
+
 
 ---------
 
