@@ -1,4 +1,7 @@
-use crate::browser::{self, LoopClosure};
+use crate::{ 
+    browser::{self, LoopClosure},
+    sound,
+    };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use futures::channel::{
