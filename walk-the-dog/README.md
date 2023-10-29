@@ -372,6 +372,155 @@ Now that you've played one sound effect, consider adding more, for example, when
 crashes into an obstacle, or lands cleanly, or slides. The choices are up to you! After you've
 had a little fun with sound effects, let's add some background music.
 
+
+### Playing long music
+
+You might think that playing music will mean detecting whether the sound is
+complete and restarting it. This is probably true for the browser's implementation,
+but fortunately, you don't have to do it. 
+The `Web Audio API` already has a flag on the `AudioBufferSourceNode` loop 
+that will play the sound on a loop until it is explicitly stopped. 
+This will make playing background audio rather simple. 
+We can add a flag to the `play_sound` function in the `sound module` for the `loop` parameter, 
+as shown here:
+
+```rust
+// src/sound.rs
+
+fn create_track_source( ctx: &AudioContext, 
+                        buffer: &AudioBuffer) -> Result<AudioBufferSourceNode> {
+    let track_source = create_buffer_source(ctx)?;
+    track_source.set_buffer(Some(&buffer));
+    connect_with_audio_node(&track_source, &ctx.destination())?;
+
+    Ok(track_source)
+}
+
+pub enum LOOPING {
+    NO,
+    YES,
+}
+
+```
+The `create_track_source` function, which is actually a refactoring
+of the `play_sound` function. It takes the first three lines of it and extracts them into
+a separate function for readability. After that, we create a `LOOPING` enum and use it to
+check whether we should call `set_loop` on `track_source`.
+
+Our play_sound with a flag looks like this:
+
+```rust
+// src/sound.rs
+
+
+pub fn play_sound( ctx: &AudioContext, 
+                   buffer: &AudioBuffer,
+                   looping: LOOPING) -> Result<()> {
+    let track_source = create_track_source(ctx, buffer)?;
+    if matches!(looping, LOOPING::YES) {
+        track_source.set_loop(true);
+    }
+
+    track_source
+        .start()
+        .map_err(|err| anyhow!("Could not start sound!{:#?}", err))
+}
+
+```
+
+By adding this flag, our program stops compiling because `Audio` in the `engine` 
+is still calling `play_sound` with two parameters.
+
+We can quickly fix that, as shown here:
+
+```rust
+// src/engine.rs
+
+impl Audio {
+    ...
+    pub fn play_sound(&self, sound: &Sound) -> Result<()> {
+        //sound::play_sound(&self.context, &sound.buffer)
+        sound::play_sound(&self.context, &sound.buffer, sound::LOOPING::NO)
+    }  
+...
+}
+
+```
+
+We'll also add a new method to play background music, which is just playing a sound with
+looping turned on:
+
+```rust
+// src/engine.rs
+
+impl Audio {
+    ...
+    pub fn play_looping_sound(&self, sound: &Sound) -> Result<()> {
+        sound::play_sound(&self.context, &sound.buffer, sound::LOOPING::YES)
+    }  
+...
+}
+```
+
+I like how the `engine` has progressively less flexibility than the sound module. 
+The `sound` and `browser` modules are wrappers around the browser functionality; 
+the `engine` provides utilities to help you make a game. 
+Now that the `engine` provides a way to play background music, 
+we can actually add it to the `game`. 
+
+In the assets, there's a second file in the sounds directory, `background_song.mp3`, 
+which you can copy into the static directory of this project. 
+Once you've done that, we can load and play the background music in our `Game::initialize` function:
+
+
+```rust
+// src/game.rs
+
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    async fn initialize(&self) -> Result<Box<dyn Game>> {
+        match self {
+            WalkTheDog::Loading => {
+                ...
+                let audio ...
+                    ...
+                let sound ...
+                    ...
+                let background_music = audio.load_sound("../resources/sound/background_song.mp3").await?;
+                //play it now                
+                audio.play_looping_sound(&background_music)?;
+
+```
+
+
+Tip::
+    
+    Check out https://gamesounds.xyz/ 
+    for royalty-free sounds for your games.
+    
+There you have it! A proper game with music and sound effects! Now to add a UI, so we
+can actually click New Game on it.    
+
+### Summary
+
+In this chapter, you added sounds to your game using the Web Audio API and got an
+overview of the API itself. The Web Audio API is very broad and has a ton of features, and
+I'd encourage you to explore it. Your first challenge is to use the gain property to change
+the volume of the music, which is rather loud at the moment. The Web Audio API also
+supports features such as stereo surround sound and programmatically generated music.
+
+Have some fun and try it out!
+
+You also added a new module to the game, and further extended the game engine to
+support it. We even covered refactoring and made some trade-offs to ensure the game
+would finish without requiring a time-consuming ideal design. I encourage you to take
+some time to add more sound effects to the game; you have the skills now to make
+RHB thud when he lands or crashes into a rock. 
+
+Speaking of crashing into rocks, you're probably sick of having to hit refresh every time you do that, 
+so in the next chapter, we'll add a small UI with a wonderful New Game button.
+
+
 ---------
 
 ```rust
