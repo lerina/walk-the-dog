@@ -94,7 +94,7 @@ Let's start by making `RedHatBoyContext` just clone, as shown here:
 
 
 All we've done is removed the Copy trait from the derive declaration. This will cause
-compiler errors on RedHatBoyStateMachine and RedHatBoyState<S> , which
+compiler errors on `RedHatBoyStateMachine` and `RedHatBoyState<S>` , which
 both derive Copy , so you'll need to remove that declaration on those structures as well.
 Once you've done that, you'll see a bunch of errors like this:
 
