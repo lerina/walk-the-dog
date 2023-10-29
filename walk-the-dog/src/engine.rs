@@ -10,7 +10,7 @@ use futures::channel::{
 use serde::Deserialize;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Mutex};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
-use web_sys::{CanvasRenderingContext2d, HtmlImageElement};
+use web_sys::{CanvasRenderingContext2d, HtmlImageElement, HtmlElement};
 use web_sys::{AudioContext, AudioBuffer,};
 
 #[derive(Clone, Copy, Default)]
@@ -417,4 +417,19 @@ impl Audio {
 
 }
 
+//--------- UI
+
+
+pub fn add_click_handler(elem: HtmlElement) -> UnboundedReceiver<()> {
+    let (mut click_sender, click_receiver) = unbounded();
+    
+    let on_click = browser::closure_wrap(Box::new(move || {
+                        click_sender.start_send(());
+                   }) as Box<dyn FnMut()>);
+
+    elem.set_onclick(Some(on_click.as_ref().unchecked_ref()));
+    on_click.forget();
+    
+    click_receiver
+}
 

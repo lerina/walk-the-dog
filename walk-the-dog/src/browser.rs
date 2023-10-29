@@ -4,7 +4,7 @@ use wasm_bindgen::closure::{Closure, WasmClosureFnOnce, WasmClosure};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    CanvasRenderingContext2d, Document, HtmlCanvasElement, HtmlImageElement, Response, Window,};
+    CanvasRenderingContext2d, Document, HtmlCanvasElement, HtmlImageElement, Response, Window, Element,};
 use js_sys::ArrayBuffer;
 
 
@@ -61,24 +61,6 @@ pub async fn fetch_with_str(resource: &str) -> Result<JsValue> {
         .await
         .map_err(|err| anyhow!("error fetching {:#?}", err))
 }
-
-/* 
-// split it into fetch_response & fetch_json
-
-pub async fn fetch_json(json_path: &str) -> Result<JsValue> {
-    let resp_value = fetch_with_str(json_path).await?;
-    let resp: Response = resp_value
-        .dyn_into()
-        .map_err(|element| anyhow!("Error converting {:#?} to Response", element))?;
-
-    JsFuture::from(
-        resp.json()
-            .map_err(|err| anyhow!("Could not get JSON from response {:#?}", err))?,
-    )
-    .await
-    .map_err(|err| anyhow!("error fetching JSON {:#?}", err))
-}
-*/
 
 
 pub async fn fetch_response(resource: &str) -> Result<Response> {
@@ -156,3 +138,63 @@ pub fn now() -> Result<f64> {
         .ok_or_else(|| anyhow!("Performance object not found"))?
         .now())
 }
+
+
+//------------- UI
+
+/*
+pub fn draw_ui(html: &str) -> Result<()> {
+    document()
+        .and_then(|doc| {
+            doc.get_element_by_id("ui")
+                .ok_or_else(|| anyhow!("UI element not found"))
+        })
+        .and_then(|ui| {
+            ui.insert_adjacent_html("afterbegin", html)
+                .map_err(|err| anyhow!("Could not insert html {:#?}", err))
+    })
+}//^-- fn draw_ui
+
+
+pub fn hide_ui() -> Result<()> {
+    let ui = document().and_then(|doc| {
+        doc.get_element_by_id("ui")
+            .ok_or_else(|| anyhow!("UI element not found"))
+        })?;
+
+    if let Some(child) = ui.first_child() {
+        ui.remove_child(&child)
+            .map(|_removed_child| ())
+            .map_err(|err| anyhow!("Failed to remove child {:#?}", err))
+    } else {
+        Ok(())
+    }
+}//^-- fn hide_ui
+*/
+
+fn find_ui() -> Result<Element> {
+    document().and_then(|doc| {
+        doc.get_element_by_id("ui")
+           .ok_or_else(|| anyhow!("UI element not found"))
+    })
+}
+
+pub fn draw_ui(html: &str) -> Result<()> {
+    find_ui()?
+        .insert_adjacent_html("afterbegin", html)
+        .map_err(|err| anyhow!("Could not insert html {:#?}", err))
+}//⁻- fn draw_ui
+
+
+pub fn hide_ui() -> Result<()> {
+    let ui = find_ui()?;
+
+    if let Some(child) = ui.first_child() {
+        ui.remove_child(&child)
+            .map(|_removed_child| ())
+            .map_err(|err| anyhow!("Failed to remove child {:#?}", err))
+    } else {
+        Ok(())
+    }
+}//^-- fn hide_ui
+

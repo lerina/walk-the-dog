@@ -1,327 +1,281 @@
 ## Adding a UI
 
+### Showing the button with Rust
 
-It may appear that we've developed everything we need for a video game, and to some
-extent, we have, except for that annoyance where we need to hit refresh every time little
-`Red Hat Boy (RHB)` hits a rock. A real game has buttons for a "new game" or "high
-scores", and in this chapter, we'll be adding that `UI`. To do so may seem trivial, but event-
-driven UIs that you might be familiar with from web development are an odd fit with
-our game loop. To add a simple button, we'll need to make significant changes to our
-application and even write a little HTML.
+We've written HTML to show the button and it looks pretty good, but we'll actually need
+to show it and hide it on command. This means interacting with the browser and using
+the browser module. We haven't done this in a while, so let's refresh our memory on
+how we translate from the JavaScript we'd write traditionally to the Rust with `web-sys`
+that we'll be using. First, we'll need code to insert the button into the ui div. There are
+lots of ways to do this; we'll use `insertAdjacentHTML` so that we can just send a string
+from our code to the screen. In JavaScript, that looks like this:
 
-In this chapter, you'll do the following:
+```javascript
 
-• Design a new game button
-• Show the button on game over
-• Start a new game
-
-At the end of the chapter, you'll have the framework in place for a more full-featured UI
-and the skills to make it work.
-
-
-### Design a new game button
-
-For now, we'll just put in a new game button that will restart from the beginning. 
-This might seem like a simple task, but in fact, we'll have quite a bit to do.
-
-First, we need to decide how we want to implement the button. 
-We really have two choices. 
-
-We can create a button in the engine, which would be a sprite that is rendered
-to the canvas, the same as everything else, or we can use an HTML button and position
-it over the canvas. 
-
-The first option will look right and won't require any traditional web programming, 
-but it will also require us to detect mouse clicks and handle a button-click animation. 
-In other words, we'd have to implement a button. That's more than we want to implement 
-to get our game working, so we're going to use a traditional HTML button and make it look 
-like it's a game element.
-
-So, we're going to write some HTML and CSS, which we can use to make the button look
-like it's a part of the game engine. 
-Then, we'll add the button to the screen with Rust and handle the click event. 
-That will be the tough part.
-
-#### Preparing a UI
-
-Conceptually, our UI will work like a HUD in a FPS or where a button is superimposed
-over the front of a game itself. Imagine that there is a perfectly clear pane of glass on top of
-the game, and the button is a sticker that's stuck to it. 
-This means, in the context of a web page, that we need a `div` that is the same size 
-and in the same place as the canvas.
-
-We can start rather quickly by updating index.html to have the required div, as follows:
-
-```html
-<!-- www/html/index.html -->
-
-<body>
-<div id="ui" style="position: absolute"></div>
-<canvas id="canvas" tabindex="0" height="600" width="600">
-Your browser does not support the Canvas.
-</canvas>
-<script src="index.js"></script>
-</body>
-</html>
+let ui = document.getElementById("ui");
+ui.insertAdjacentHTML("afterbegin", "<button>New Game</button>");
 ```
 
-Note that the `ui div` is `position: absolute` so that it doesn't "push" the canvas
-element below it. You can see how this will work by putting a standard HTML button in
-the div element, as follows:
+Note:
+You can find the docs for this function at [insertAdjacentHTML](https://developer.mozilla.org/en-US/docs/Web/API/Element/insertAdjacentHTML)
 
-```html
-<!-- www/html/index.html -->
+We spent a lot of time translating this kind of code into Rust in Chapter 2, Drawing Sprites,
+and Chapter 3, Creating a Game Loop, but let's refresh our memory and appease any monsters
+who read books out of order. 
 
-<div id="ui" style="position: absolute">
-<button>New Game</button>
-</div>
+> Any JavaScript function or method is likely to be found in the `web-sys` crate with the name converted from `PascalCase` to snake_case, and with most of the functions returning Option . 
+
+Frequently, you can just try that out, and it will work. 
+Let's create a new function in browser and see whether that's the case, as shown here:
+
+```rust
+// src/browser.rs
+
+pub fn draw_ui(html: &str) -> Result<()> {
+    document()
+        .and_then(|doc| {
+            doc.get_element_by_id("ui")
+                .ok_or_else(|| anyhow!("UI element not found"))
+        })
+        .and_then(|ui| {
+            ui.insert_adjacent_html("afterbegin", html)
+                .map_err(|err| anyhow!("Could not insert html {:#?}", err))
+    })
+}//^-- fn draw_ui
 ```
 
-We are sticking to our no-bloat **wasm without NPM**P 
-so reproduce here for quick reference is the full `index.html`:
+This `draw_ui` function assumes there is a div with the ui ID, just as the canvas
+function assumes an ID of canvas. 
 
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>initial index</title>
-  <link rel="stylesheet" href="../css/styles.css">
-  <link rel="icon" href="../favicon_96x96.png">
-</head>
-<body>
-<main class="container">
+This means it's not incredibly generic, but we don't need a more complex solution right now. 
+If we do later, we'll write more functions. 
+As always, we don't want to go too far with some idea of "perfect" code because we've got a
+game to finish.
 
-<div id="ui" style="position: absolute">
-<button>New Game</button>
-</div>
+Once again, the Rust version of the code is much longer, using and_then and mapping
+errors to make sure we handle the error cases instead of just crashing or halting the
+program as JavaScript would. 
+This is another case where code is aesthetically less pleasing in Rust but, in my opinion, 
+better because it highlights the possible causes of an error. 
+The other function we'll need right away is used to hide the ui element, which looks like this
+in JavaScript:
 
-<canvas id="canvas" tabindex="0" width="600" height="600">
-    Your browser does not support the Canvas.
-</canvas>
+```javascript
 
-
-</main>
-  <script type="module" src="../js/index.js"></script>
-</body>
-</html>
+let ui = document.getElementById("ui");
+let firstChild = ui.firstChild;
+ui.removeChild(firstChild);
 ```
 
+This function grabs the first child of the ui div and removes it with the `removeChild`
+method. To be completely thorough, we should loop through all the ui children and
+make sure they all get removed, but we don't do that here because we already know there's
+only one. We also remove the children (and don't just set their visibility to hidden) so that
+they do not affect the layout, and any event listeners are removed. 
 
-In the CSS file, you'll want to add a style for that div. It's not really important that
-this style isn't an inline one, except that this handily checks that our CSS file is being
-loaded. In the CSS file, insert the following:
+Once again, you'll want to translate JavaScript to Rust. 
+In this case, `firstChild` becomes the `first_child` method 
+and `removeChild` becomes `remove_child` , as shown here:
 
-```css
-/* www/css/styles.css */
+```rust
+// src/browser.rs
 
-#ui {
-position: absolute;
+pub fn hide_ui() -> Result<()> {
+    let ui = document().and_then(|doc| {
+        doc.get_element_by_id("ui")
+            .ok_or_else(|| anyhow!("UI element not found"))
+        })?;
+
+    if let Some(child) = ui.first_child() {
+        ui.remove_child(&child)
+            .map(|_removed_child| ())
+            .map_err(|err| anyhow!("Failed to remove child {:#?}", err))
+    } else {
+        Ok(())
+    }
+}//^-- fn hide_ui
+
+```
+
+This function is a little different than `draw_ui`, in part because `first_child` being
+missing isn't an error; it just means you called `hide_ui` on an empty `UI`, and we don't
+want that to error. 
+That's why we use the `if let` construct and just return an `Ok(())` explicitly if it isn't present. 
+
+The ui div was already empty, so it's fine. 
+
+In addition, there's that weird call to `map(|_removed_child| ())`, 
+which we call because `remove_child` returns the `Element` being removed. 
+We don't care about it here, so we are, once again, explicitly mapping it to our expected value of unit. 
+
+Finally, of course, we address the error with `anyhow!`.
+
+This function reveals some duplication, so let's go ahead and refactor it out in the final
+version, as follows:
+
+We extract the duplicated code into a new function:
+
+```rust
+// src/browser.rs
+use web_sys::Element;
+...
+
+fn find_ui() -> Result<Element> {
+    document().and_then(|doc| {
+        doc.get_element_by_id("ui")
+           .ok_or_else(|| anyhow!("UI element not found"))
+    })
 }
 ```
 
-This is a CSS selector for any elements with the ui ID and sets their position to
-absolute. 
-If your CSS file is being loaded, then the new game button should be over the
-top of the canvas again. 
+Then use it in the previous code:
 
-Later, we'll programmatically add that button in our game code,
-but for now, we just want it to show up and look right. 
+```rust
+// src/browser.rs
 
-We'll want to give it a font that looks like a video game, 
-and a background too. 
 
-Let's start with the font. In your assets, you'll see there is a directory called ui, 
-which contains a file named `kenney_future_narrow-webfont.woff2`. 
-WOFF stands for Web Open Font Format and is a font format that will work in every modern browser.
+pub fn draw_ui(html: &str) -> Result<()> {
+    find_ui()?
+        .insert_adjacent_html("afterbegin", html)
+        .map_err(|err| anyhow!("Could not insert html {:#?}", err))
+}//⁻- fn draw_ui
 
-Copy `kenney_future_narrow-webfont.woff2` into the static directory in
-your application (we have it at www/fonts/) so that it gets picked up by the build process. 
-Then, you need to specify `@font-face` in CSS so that elements can be rendered in it, 
-which looks like so:
+pub fn hide_ui() -> Result<()> {
+    let ui = find_ui()?;
 
-```css
-/* www/css/styles.css */
-
-@font-face {
-    font-family: 'Ken Future';
-    src: url('../resources/fonts/kenney_future_narrow-webfont.woff2');
-}
+    if let Some(child) = ui.first_child() {
+        ui.remove_child(&child)
+            .map(|_removed_child| ())
+            .map_err(|err| anyhow!("Failed to remove child {:#?}", err))
+    } else {
+        Ok(())
+    }
+}//^-- fn hide_ui
 
 ```
 
-What we've done here is load a new font face with the simple name ' Ken Future ' so
-that we can reference it in other styles, and loaded it via the specified URL. Now, we can
-change all buttons to use that font with this additional CSS:
+Here, we've replaced both of the repetitive `document().and_then` calls with calls to
+`find_ui`, which is a private function that ensures we always get the same error when UI
+isn't found. 
+It streamlines a little bit of code and makes it possible to use the try `?` operator
+in `draw_ui`. The `find_ui` function returns `Element`, so you need to make sure to
+bring into scope `web_sys::Element`.
 
-```css
-/* www/css/styles.css */
+We've got the tools we need to draw the button set up in browser. 
 
-button {
-font-family: 'Ken Future';
-}
-```
+To show our button programmatically, 
+we can just call `browser::draw_ui("<button>New Game</button>")`. 
 
+That's great, but we can't actually handle doing anything on the button click yet. 
+We have two choices. 
 
-The button still looks a lot like an HTML button because of that traditional web
-background. To make it look more like a game button, we'll use a background and CSS
-Sprites to create a pretty button with rounded corners and hover colors.
+The first is to create the button with an `onclick` handler 
+such as `browser::draw_ui("<button onclick='myfunc'>New Game</button>")`. 
+This will require taking a function in our Rust package and exposing it to the browser. 
+It would also require some sort of global variable that the function could operate on. 
+If myfunc is going to operate on the game state, then it needs access to the game state. 
+We could use something such as an event queue here, and that's a viable approach, 
+but it's not what we'll be doing.
 
-![ugly button](./readme_pix/btn_no_skin.png)
+What we're going to do instead is set the `onclick` variable in Rust code, via the
+`web-sys` library, to a closure that writes to a channel. 
+Other code can listen to this channel and see whether a click event has happened. 
+This code will be very similar to the code we wrote in Chapter 3, Creating a Game Loop, 
+for handling keyboard input.
 
-#### CSS Sprites
-As a game developer, you already know what a sprite is; you haven't forgotten Chapter 2,
-Drawing Sprites, already, have you? In the case of CSS Sprites, the term as commonly used
-is a bit of a misnomer, as instead of referring to a sprite, it really refers to a sprite sheet.
-Conceptually, CSS Sprites work the same way as rendering them with the canvas. You
-slice out a chunk of a larger sprite and only render that portion. We'll just do the entire
-thing in CSS instead of Rust. Since we're using CSS, we can change the background
-when the mouse is over the button and when it is clicked. This will make the button look
-correct, and we won't have to write Rust code to have the same effect. Clicking a button is
-something a browser is very good at, so we'll leverage it.
-We'll use the Button.svg file from the ui directory in the downloaded assets, so you
-can copy that file to the static directory in your game's project. The SVG file actually
-contains an entire library of buttons, which looks like this:
-
-![The top of Button.svg](./readme_pix/btns.png)
-
-We'll want to slice out the wide blue, green, and yellow buttons to be the background for
-the button in various states. We'll start by using the background attribute in CSS to set
-the button's background to the SVG file. You'll update the style as follows:
+We'll start with a function in the `engine` module that takes `HtmlElement` 
+and returns `UnboundedReceiver`, as shown here:
 
 
+```rust
+// src/engine.rs
+...
+use web_sys::HtmlElement
+...
 
-```css
-/* www/css/styles.css */
-
-button {
-font-family: 'Ken Future';
-background: -72px -60px url('../resources/pix/Button.svg');
-}
-```
-
-The pixel values in background , `-72px` and `-60px`, mean taking the background
-and shifting it 72 pixels to the left and 60 pixels upward to line it up with the blank blue
-button. 
-You can get those values in a vector graphics editor such as Inkscape. 
-
-The url value specifies which file to load. 
-Make those changes, and you'll see the button change to have a new background... well, sort of.
-
-![Btn cut-off background](./readme_pix/btn_bg01.png)
-
-As you can see, the background is cut off, so you only get half of it, and the button itself
-still has some of the effects of a default HTML button. We can get rid of those effects with
-a little more CSS to remove the border and resize the button to match the background, 
-as shown here:
-
-```css
-/* www/css/styles.css */
-
-button {
-font-family: 'Ken Future';
-background: -72px -60px url('../resources/pix/Button.svg');
-border: none;
-width: 82px;
-height: 33px;
-}
-```
-
-The `width` and `height` values were plucked from *Inkscape~ again, and that will set
-the button to be the same size as the button background in the source. As with the sprite
-sheets we used earlier, we need to cut out a slice from the original source, so in this case,
-there is a rectangle starting at (72, 60) with a width and height of 82x33 . With those
-changes, the button now looks like a game button instead of a web button.
-
-![The new button](./readme_pix/newBtn.png)
-
-There are still a few problems. The button now doesn't visually interact with the user, so it
-just looks like a picture when you click it. We can address that with CSS pseudo-classes for
-`#active` and `#hover`.
-
-Note::
+pub fn add_click_handler(elem: HtmlElement) -> UnboundedReceiver<()> {
+    let (click_sender, click_receiver) = unbounded();
     
-    Some browsers, notably Firefox, 
-    will render New Game on one line instead of two.
+    click_receiver
+}
+
+```
+
+Don't forget to bring `HtmlElement` into scope with `use web_sys::HtmlElement`.
+This doesn't do much, and it sure doesn't seem to have anything to do with a click, 
+and it's not obvious why we need an `UnboundedReceiver`. 
+When we add a click handler to the button, 
+we don't want to have to move anything about the game into the closure. 
+Using a channel here lets us encapsulate the handling of the click 
+and separate it from the reacting to click event. 
+
+Let's continue by creating the `on_click` handler, as shown here:
+
+```rust
+// src/engine.rs
+
+pub fn add_click_handler(elem: HtmlElement) -> UnboundedReceiver<()> {
+    //let (click_sender, click_receiver) = unbounded();
+    let (mut click_sender, click_receiver) = unbounded();
     
+    let on_click = browser::closure_wrap(Box::new(move || {
+                        click_sender.start_send(());
+                   }) as Box<dyn FnMut()>);
 
-In each pseudo-class, we'll change the background attribute to line up with another
-background. Again, the numbers were pulled out of Inkscape, with a little tweaking once
-they were added to make sure that they lined up. First, we can handle the hover style,
-which is when the mouse is over the image.
-That produces a hover button that looks like this:
-
-```css
-/* www/css/styles.css */
-
-button:hover {
-background: -158px -60px url('../resources/pix/Button.svg');
+    click_receiver
 }
 ```
 
-![Hover](./readme_pix/hover.png)
+The changes we've made are to make `click_sender` mutable and then move it into
+the newly created closure called `on_click`. You may remember `closure_wrap` from
+the earlier chapters, which needs to take a heap-allocated closure, in other words a Box,
+which, in this case, will be passed a mouse event that we're not using so we can safely
+skip it. 
 
-Then, we'll add the active style, which is what the mouse will look like when clicked:
+The casting to `Box<dyn FnMut()>` is necessary to appease the compiler and
+allow this function to be converted into `WasmClosure`. 
 
-```css
-/* www/css/styles.css */
+Inside that, we call the sender's `start_send` function and pass it a unit `()`. 
+Since we're not using any other parameters, we can just have the receiver check for any event.
 
-button:active {
-background: -244px -60px url('../resources/pix/Button.svg');
+Finally, we'll need to take this closure and assign it to the `on_click` method on `elem` so
+that the button actually handles it, which looks as follows:
+
+```rust
+// src/engine.rs
+
+pub fn add_click_handler(elem: HtmlElement) -> UnboundedReceiver<()> {
+    let (mut click_sender, click_receiver) = unbounded();
+    
+    let on_click = browser::closure_wrap(Box::new(move || {
+                        click_sender.start_send(());
+                   }) as Box<dyn FnMut()>);
+
+    elem.set_onclick(Some(on_click.as_ref().unchecked_ref()));
+    on_click.forget();
+    
+    click_receiver
 }
 ```
-![Active](./readme_pix/active.png)
+We've added the call to `elem.set_onclick`, 
+which corresponds to `elem.onclick =` in JavaScript. 
+Note how we pass `set_onclick` a `Some` variant because `onclick` itself can be null 
+or undefined in JavaScript and, therefore, can be `None` in Rust and is an `Option` type. 
+
+We then pass it `on_click.as_ref().unchecked_ref()`, which is the pattern 
+we've used several times to turn Closure into a function that `web-sys` can use.
+
+Finally, we also make sure to forget the `on_click` handler. Without this, when we
+actually make this callback, the program will crash because `on_click` hasn't been
+properly handed off to JavaScript. We've done this a few times, so I won't belabour the
+point here. 
+Now that we've written all the code, we'll need to show a button and handle the
+response to it, and we need to integrate it into our game. 
+
+Let's figure out how to show the button.
 
 
-The final issue is that our button is really small, for a game anyway, and is positioned at the
-upper-left corner. Making the button larger the traditional CSS way with width and height
-is problematic, as shown here when we change the width value:
 
-![That is not a button](./readme_pix/not_a_btn.png)
-
-Changing the width or height will mean changing the "slice" that we're taking from
-the sprite sheet, so we don't want that. 
-What we'll use instead is the CSS translate property, 
-with the `scale` function, which looks like so:
-
-```css
-/* www/css/styles.css */
-
-button {
-    ...
-    transform: scale(1.8);
-}
-```
-
-This gives us a nice large button with the right background, but it's not in the right spot.
-
-![The button with the left side cut off](./readme_pix/not_right.png)
-
-Now that the button is large and looks like a game button, we just need to put it in the
-right spot. You can do that by adding `translate` to the transform property, where
-translate is a **fancy way of saying move**. 
-
-You can see that as follows:
-
-
-```css
-/* www/css/styles.css */
-
-button {
-    ...
-    transform: scale(1.8) translate(150px, 100px);
-}
-```
-
-The new game button now shows up, but it doesn't do anything because our code
-isn't doing anything with `onclick`. It's just a floating button, taunting us with its
-ineffectiveness. Go ahead and remove the button element from `index.html` , but
-keep `div` with the `ui` ID. 
-
-Instead, we'll use Rust to dynamically add and remove the button when we need it 
-and actually handle the clicks. 
-For that, we'll want to make some additions to our browser and engine modules, 
-so let's dig in.
 
 ---------
 
