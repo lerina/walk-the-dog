@@ -1,21 +1,62 @@
+
+/*
 html, body {height: 100%;margin: 0; padding: 0}
 * {
-    overflow: hidden!important;
+overflow: hidden!important;
 }
 
 .container { 
     display: grid; 
    grid-template-columns: 650px 1fr; 
-    /* grid-gap: 4px;
-    border: 1px solid black; */
+
     width: 100%;
     height: 100%;
-} 
+}
 
+cant nest comments 
+    /* grid-gap: 4px;
+    border: 1px solid black; 
+*/
+
+/*
 main {
     margin: 0 auto;
     max-width: 100%;
     display: flex;
     align-items: center;
 }
+*/
+
+#ui {
+position: absolute;
+}
+
+
+@font-face {
+font-family: 'Ken Future';
+src: url('../resources/fonts/kenney_future_narrow-webfont.woff2');
+}
+
+button {
+font-family: 'Ken Future';
+background: -72px -60px url('../resources/pix/Button.svg');
+border: none;
+width: 82px;
+height: 33px;
+transform: scale(1.8) translate(150px, 100px);
+}
+
+button:hover {
+background: -158px -60px url('../resources/pix/Button.svg');
+}
+
+button:active {
+background: -244px -60px url('../resources/pix/Button.svg');
+}
+
+
+
+
+
+
 
