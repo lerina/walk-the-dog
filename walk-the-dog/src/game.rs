@@ -7,7 +7,7 @@ use rand::prelude::{thread_rng, Rng};
 use self::red_hat_boy_states::*;
 use crate::{
     browser,
-    engine::{self, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet},
+    engine::{self, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet, Sound, Audio},
     segments::{stone_and_platform, platform_and_stone,},
 };
 
@@ -167,9 +167,18 @@ pub struct RedHatBoy {
 }
 
 impl RedHatBoy {
+    /*
     fn new(sprite_sheet: Sheet, image: HtmlImageElement) -> Self {
         RedHatBoy {
             state_machine: RedHatBoyStateMachine::Idle(RedHatBoyState::new()),
+            sprite_sheet,
+            image,
+        }
+    }
+    */
+    fn new(sprite_sheet: Sheet, image: HtmlImageElement, audio: Audio, sound: Sound) -> Self {
+        RedHatBoy {
+            state_machine: RedHatBoyStateMachine::Idle(RedHatBoyState::new(audio, sound)),
             sprite_sheet,
             image,
         }
@@ -414,7 +423,9 @@ impl From<FallingEndState> for RedHatBoyStateMachine {
 
 mod red_hat_boy_states {
     use crate::engine::Point;
-    use super::HEIGHT;
+    //use super::HEIGHT;
+    use super::{Audio, Sound, HEIGHT};
+    
 
     //const FLOOR: i16 = 475;
     const FLOOR: i16 = 479;
@@ -459,12 +470,17 @@ mod red_hat_boy_states {
     pub struct Idle;
 
     impl RedHatBoyState<Idle> {
-        pub fn new() -> Self {
+        //pub fn new() -> Self {
+        pub fn new(audio: Audio, jump_sound: Sound) -> Self {
+
             RedHatBoyState {
                 context: RedHatBoyContext {
                     frame: 0,
                     position: Point { x: STARTING_POINT, y: FLOOR, },
                     velocity: Point { x: 0, y: 0 },
+
+                    audio,
+                    jump_sound,
                 },
                 _state: Idle {},
             }
@@ -500,12 +516,24 @@ mod red_hat_boy_states {
             self
         }
 
+        /*
         pub fn jump(self) -> RedHatBoyState<Jumping> {
             RedHatBoyState {
                 context: self.context.reset_frame().set_vertical_velocity(JUMP_SPEED),
                 _state: Jumping {},
             }
         }
+       */
+        pub fn jump(self) -> RedHatBoyState<Jumping> {
+            RedHatBoyState {
+                context: self
+                .context
+                .reset_frame()
+                .set_vertical_velocity(JUMP_SPEED)
+                .play_jump_sound(),
+                _state: Jumping {},
+            }
+        }        
 
         pub fn slide(self) -> RedHatBoyState<Sliding> {
             RedHatBoyState {
@@ -654,11 +682,14 @@ mod red_hat_boy_states {
 
 
 
-    #[derive(Copy, Clone)]
+    //#[derive(Copy, Clone)]
+    #[derive(Clone)]
     pub struct RedHatBoyContext {
         pub frame: u8,
         pub position: Point,
         pub velocity: Point,
+        audio: Audio,
+        jump_sound: Sound,
     }
 
     impl RedHatBoyContext {
@@ -707,8 +738,16 @@ mod red_hat_boy_states {
             self.position.y = position;
             self
         }
-    }
-}
+
+        fn play_jump_sound(self) -> Self {
+            if let Err(err) = self.audio.play_sound(&self.jump_sound) {
+                log!("Error playing jump sound {:#?}", err);
+            }
+
+            self
+        }
+    }//^-- impl RedHatBoyContext
+}//^-- mod
 
 pub struct Walk {
     obstacle_sheet: Rc<SpriteSheet>,
@@ -765,7 +804,16 @@ impl Game for WalkTheDog {
         match self {
             WalkTheDog::Loading => {
                 let sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
-                let rhb = RedHatBoy::new(sheet, engine::load_image("../resources/pix/rhb.png").await?);
+                
+                let audio = Audio::new()?;
+                let sound = audio.load_sound("../resources/sound/SFX_Jump_23.mp3").await?;
+
+                //let rhb = RedHatBoy::new(sheet, engine::load_image("../resources/pix/rhb.png").await?);
+                let rhb = RedHatBoy::new(sheet, 
+                                         engine::load_image("../resources/pix/rhb.png").await?,
+                                         audio,
+                                         sound,);
+
                 let background = engine::load_image("../resources/pix/BG.png").await?;
                 let stone = engine::load_image("../resources/pix/Stone.png").await?;
                 let tiles = browser::fetch_json("../resources/pix/tiles.json").await?;
