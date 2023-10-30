@@ -1,280 +1,212 @@
 ## Adding a UI
 
-### Showing the button with Rust
+### Show the button on game over
 
-We've written HTML to show the button and it looks pretty good, but we'll actually need
-to show it and hide it on command. This means interacting with the browser and using
-the browser module. We haven't done this in a while, so let's refresh our memory on
-how we translate from the JavaScript we'd write traditionally to the Rust with `web-sys`
-that we'll be using. First, we'll need code to insert the button into the ui div. There are
-lots of ways to do this; we'll use `insertAdjacentHTML` so that we can just send a string
-from our code to the screen. In JavaScript, that looks like this:
+We can show and hide the button in the Game update method by checking on each
+frame if the game is over and if the button is present, ensuring that we only show or
+hide it once, and that would probably work, but I think you can sense the spaghetti code
+beginning to form if we do that. In general, it's best to avoid too much conditional logic
+in update , as it gets confusing and allows for logic bugs. Instead, we can think of every
+conditional check that looks like if (state_is_true) as two different states of the
+system. So, if the new game button is shown, that's one game state, and if it isn't, that's
+another game state. You know what that means – it's time for a state machine.
 
-```javascript
+#### A state machine review
 
-let ui = document.getElementById("ui");
-ui.insertAdjacentHTML("afterbegin", "<button>New Game</button>");
-```
+In Chapter 4, Managing Animations with State Machines, we converted RHB to a state
+machine in order to make it change animations on events easily and, more importantly,
+correctly. For instance, when we wanted `RHB` to jump, we went from `Running` to
+`Jumping` via a `typestate` method, only changing the state one time and changing the
+`velocity` and playing the `sound` one time. That code is reproduced here for clarity:
 
-Note:
-You can find the docs for this function at [insertAdjacentHTML](https://developer.mozilla.org/en-US/docs/Web/API/Element/insertAdjacentHTML)
 
-We spent a lot of time translating this kind of code into Rust in Chapter 2, Drawing Sprites,
-and Chapter 3, Creating a Game Loop, but let's refresh our memory and appease any monsters
-who read books out of order. 
-
-> Any JavaScript function or method is likely to be found in the `web-sys` crate with the name converted from `PascalCase` to snake_case, and with most of the functions returning Option . 
-
-Frequently, you can just try that out, and it will work. 
-Let's create a new function in browser and see whether that's the case, as shown here:
 
 ```rust
-// src/browser.rs
+// src/game.rs
 
-pub fn draw_ui(html: &str) -> Result<()> {
-    document()
-        .and_then(|doc| {
-            doc.get_element_by_id("ui")
-                .ok_or_else(|| anyhow!("UI element not found"))
-        })
-        .and_then(|ui| {
-            ui.insert_adjacent_html("afterbegin", html)
-                .map_err(|err| anyhow!("Could not insert html {:#?}", err))
-    })
-}//^-- fn draw_ui
-```
-
-This `draw_ui` function assumes there is a div with the ui ID, just as the canvas
-function assumes an ID of canvas. 
-
-This means it's not incredibly generic, but we don't need a more complex solution right now. 
-If we do later, we'll write more functions. 
-As always, we don't want to go too far with some idea of "perfect" code because we've got a
-game to finish.
-
-Once again, the Rust version of the code is much longer, using and_then and mapping
-errors to make sure we handle the error cases instead of just crashing or halting the
-program as JavaScript would. 
-This is another case where code is aesthetically less pleasing in Rust but, in my opinion, 
-better because it highlights the possible causes of an error. 
-The other function we'll need right away is used to hide the ui element, which looks like this
-in JavaScript:
-
-```javascript
-
-let ui = document.getElementById("ui");
-let firstChild = ui.firstChild;
-ui.removeChild(firstChild);
-```
-
-This function grabs the first child of the ui div and removes it with the `removeChild`
-method. To be completely thorough, we should loop through all the ui children and
-make sure they all get removed, but we don't do that here because we already know there's
-only one. We also remove the children (and don't just set their visibility to hidden) so that
-they do not affect the layout, and any event listeners are removed. 
-
-Once again, you'll want to translate JavaScript to Rust. 
-In this case, `firstChild` becomes the `first_child` method 
-and `removeChild` becomes `remove_child` , as shown here:
-
-```rust
-// src/browser.rs
-
-pub fn hide_ui() -> Result<()> {
-    let ui = document().and_then(|doc| {
-        doc.get_element_by_id("ui")
-            .ok_or_else(|| anyhow!("UI element not found"))
-        })?;
-
-    if let Some(child) = ui.first_child() {
-        ui.remove_child(&child)
-            .map(|_removed_child| ())
-            .map_err(|err| anyhow!("Failed to remove child {:#?}", err))
-    } else {
-        Ok(())
+impl RedHatBoyState<Running> {
+    ...
+    pub fn jump(self) -> RedHatBoyState<Jumping> {
+        RedHatBoyState {
+            context: self
+                .context
+                .reset_frame()
+                .set_vertical_velocity(JUMP_SPEED)
+                .play_jump_sound(),
+            _state: Jumping {},
+        }
     }
-}//^-- fn hide_ui
 
 ```
 
-This function is a little different than `draw_ui`, in part because `first_child` being
-missing isn't an error; it just means you called `hide_ui` on an empty `UI`, and we don't
-want that to error. 
-That's why we use the `if let` construct and just return an `Ok(())` explicitly if it isn't present. 
-
-The ui div was already empty, so it's fine. 
-
-In addition, there's that weird call to `map(|_removed_child| ())`, 
-which we call because `remove_child` returns the `Element` being removed. 
-We don't care about it here, so we are, once again, explicitly mapping it to our expected value of unit. 
-
-Finally, of course, we address the error with `anyhow!`.
-
-This function reveals some duplication, so let's go ahead and refactor it out in the final
-version, as follows:
-
-We extract the duplicated code into a new function:
+The `typestates` work great, but they are also noisy if we don't need that kind of
+functionality. That's why in that same chapter, we chose to model our game itself as a
+simple `enum`, like so:
 
 ```rust
-// src/browser.rs
-use web_sys::Element;
-...
+// src/game.rs
 
-fn find_ui() -> Result<Element> {
-    document().and_then(|doc| {
-        doc.get_element_by_id("ui")
-           .ok_or_else(|| anyhow!("UI element not found"))
-    })
-}
-```
-
-Then use it in the previous code:
-
-```rust
-// src/browser.rs
-
-
-pub fn draw_ui(html: &str) -> Result<()> {
-    find_ui()?
-        .insert_adjacent_html("afterbegin", html)
-        .map_err(|err| anyhow!("Could not insert html {:#?}", err))
-}//⁻- fn draw_ui
-
-pub fn hide_ui() -> Result<()> {
-    let ui = find_ui()?;
-
-    if let Some(child) = ui.first_child() {
-        ui.remove_child(&child)
-            .map(|_removed_child| ())
-            .map_err(|err| anyhow!("Failed to remove child {:#?}", err))
-    } else {
-        Ok(())
-    }
-}//^-- fn hide_ui
-
-```
-
-Here, we've replaced both of the repetitive `document().and_then` calls with calls to
-`find_ui`, which is a private function that ensures we always get the same error when UI
-isn't found. 
-It streamlines a little bit of code and makes it possible to use the try `?` operator
-in `draw_ui`. The `find_ui` function returns `Element`, so you need to make sure to
-bring into scope `web_sys::Element`.
-
-We've got the tools we need to draw the button set up in browser. 
-
-To show our button programmatically, 
-we can just call `browser::draw_ui("<button>New Game</button>")`. 
-
-That's great, but we can't actually handle doing anything on the button click yet. 
-We have two choices. 
-
-The first is to create the button with an `onclick` handler 
-such as `browser::draw_ui("<button onclick='myfunc'>New Game</button>")`. 
-This will require taking a function in our Rust package and exposing it to the browser. 
-It would also require some sort of global variable that the function could operate on. 
-If myfunc is going to operate on the game state, then it needs access to the game state. 
-We could use something such as an event queue here, and that's a viable approach, 
-but it's not what we'll be doing.
-
-What we're going to do instead is set the `onclick` variable in Rust code, via the
-`web-sys` library, to a closure that writes to a channel. 
-Other code can listen to this channel and see whether a click event has happened. 
-This code will be very similar to the code we wrote in Chapter 3, Creating a Game Loop, 
-for handling keyboard input.
-
-We'll start with a function in the `engine` module that takes `HtmlElement` 
-and returns `UnboundedReceiver`, as shown here:
-
-
-```rust
-// src/engine.rs
-...
-use web_sys::HtmlElement
-...
-
-pub fn add_click_handler(elem: HtmlElement) -> UnboundedReceiver<()> {
-    let (click_sender, click_receiver) = unbounded();
-    
-    click_receiver
+pub enum WalkTheDog {
+    Loading,
+    Loaded(Walk),
 }
 
 ```
 
-Don't forget to bring `HtmlElement` into scope with `use web_sys::HtmlElement`.
-This doesn't do much, and it sure doesn't seem to have anything to do with a click, 
-and it's not obvious why we need an `UnboundedReceiver`. 
-When we add a click handler to the button, 
-we don't want to have to move anything about the game into the closure. 
-Using a channel here lets us encapsulate the handling of the click 
-and separate it from the reacting to click event. 
+This is going to change significantly because we now have a problem that necessitates a
+state machine. 
+When `RHB` is knocked out, the game is over, and the new game button should appear. 
+That's a side effect that needs to happen once, on a change of state, 
+the perfect use case for our state machine. 
 
-Let's continue by creating the `on_click` handler, as shown here:
+Unfortunately, refactoring to a state machine is going to require a not insignificant amount 
+of code because our current method for implementing state machines is elegant but a little noisy. 
+
+In addition, there's actually two state machines at work here, which is not obvious at first. 
+
+The first is the one we see at the beginning, moving from `Loading` to `Loaded`, 
+which you can think of as when you don't have Walk and when you do. 
+
+The second is the state machine of `Walk` itself, which moves from `Ready` to `Walking` to `GameOver`. 
+
+You can visualize it like this:
+
+
+![Nested state machines](./readme_pix/Nested_state_machines.png)
+
+
+As you can see, we have two state machines here, one going from `Loading` to `Loaded`
+and the other representing the three game states of `Ready`, `Walking`, and `GameOver`.
+
+There is a third state machine, not pictured, the famous `RedHatBoyStateMachine`
+that manages the `RedHatBoy` animations. A couple of the states pictured mimic
+the states in `RedHatBoyStateMachine`, where `Idle` is `Ready` and `Walking`
+is `Running`, so there is a temptation to move `RedHatBoyStateMachine` into
+`WalkTheDogStateMachine`. 
+
+This could work, but remember that `Walk` doesn't have a "jumping" state and so, by doing that, you'll need to start checking a Boolean, and the modeling starts to break down. 
+
+It's best to accept the similarity because the game is heavily dependent on what `RHB` is doing, 
+but treat `RedHatBoyStateMachine` as having more fine-grained states. 
+
+What does work is turning `Loading` and `Loaded` into `Option`. 
+Specifically, we'll model our game like so:
+
+```
+struct WalkTheDogGame {
+    machine: Option<WalkTheDogStateMachine>
+}
+```
+This code isn't meant to be written anywhere yet; it's just here for clarity. 
+
+There's a big advantage to using `Option` here, and it has to do with the way our `update` function
+works. 
+For clarity, I'm going to reproduce a section of our `game loop` here:
+
 
 ```rust
-// src/engine.rs
+// src/game.rs
 
-pub fn add_click_handler(elem: HtmlElement) -> UnboundedReceiver<()> {
-    //let (click_sender, click_receiver) = unbounded();
-    let (mut click_sender, click_receiver) = unbounded();
-    
-    let on_click = browser::closure_wrap(Box::new(move || {
-                        click_sender.start_send(());
-                   }) as Box<dyn FnMut()>);
+let mut keystate = KeyState::new();
+*g.borrow_mut() = Some(browser::create_raf_closure(move |perf: f64| {
+                    process_input(&mut keystate, &mut keyevent_receiver);
+                    game_loop.accumulated_delta += (perf – game_loop.last_frame) as f32;
+                    
+                    while game_loop.accumulated_delta > FRAME_SIZE {
+                        game.update(&keystate);
+                        game_loop.accumulated_delta -= FRAME_SIZE;
+                    }
 
-    click_receiver
+```
+
+The key part here is the `game.update` line, which performs a mutable borrow on the
+`game` object instead of moving it into `update`. 
+This is because once `game` is owned by `FnMut`, it can't be moved out. 
+Trying to actually leads to this compiler error:
+
+```
+error[E0507]: cannot move out of `*game`, as `game` is a
+captured variable in an `FnMut` closure
+```
+
+Mutable borrows such as this are tricky because they can make it more challenging
+to navigate the borrow checker as you proceed down the call stack. In this case, it
+becomes a problem if we try to implement another state machine in the same manner as
+`RedHatBoyStateMachine`. 
+
+In our state machine implementation, each `typestate` method consumes the machine and returns a new one. 
+
+Now, let's imagine that we are modeling the entire game as `enum`, like so:
+
+```
+enum WalkTheDogGame {
+    Loading,
+    Loaded(Walk),
+    Walking(Walk),
+    GameOver(Walk)
 }
 ```
 
-The changes we've made are to make `click_sender` mutable and then move it into
-the newly created closure called `on_click`. You may remember `closure_wrap` from
-the earlier chapters, which needs to take a heap-allocated closure, in other words a Box,
-which, in this case, will be passed a mouse event that we're not using so we can safely
-skip it. 
 
-The casting to `Box<dyn FnMut()>` is necessary to appease the compiler and
-allow this function to be converted into `WasmClosure`. 
+In order to make this work with the mutable borrow in `update`, we would have to `clone`
+the entire game on every state change because the from function couldn't take ownership
+of it. 
+In other words, the closure in our `game.update` function lends game to the `update` function. 
+This can't turn around and give it to the from function – it doesn't own
+it! Doing so requires cloning the entire game, potentially on every frame!
 
-Inside that, we call the sender's `start_send` function and pass it a unit `()`. 
-Since we're not using any other parameters, we can just have the receiver check for any event.
+Modeling the game as holding an optional `WalkTheDogStateMachine` has two advantages:
 
-Finally, we'll need to take this closure and assign it to the `on_click` method on `elem` so
-that the button actually handles it, which looks as follows:
+• We can call take on Option to get ownership of the state machine.
+• The type reflects that the state machine isn't available until the game is loaded.
 
-```rust
-// src/engine.rs
 
-pub fn add_click_handler(elem: HtmlElement) -> UnboundedReceiver<()> {
-    let (mut click_sender, click_receiver) = unbounded();
+Note::
     
-    let on_click = browser::closure_wrap(Box::new(move || {
-                        click_sender.start_send(());
-                   }) as Box<dyn FnMut()>);
-
-    elem.set_onclick(Some(on_click.as_ref().unchecked_ref()));
-    on_click.forget();
+    There are, naturally, many ways to model our game type, and some of them are
+    going to be better than the one we'll choose here. However, before you start
+    trying to do a "simpler" version of this type, let me warn you that I tried several
+    different variations on this solution and ultimately found using Option to be
+    the most straightforward choice. Several other implementations either ended
+    with complex borrowing or unnecessary cloning. Be wary, but also be brave.
+    You may find a better way than I did!
     
-    click_receiver
-}
-```
-We've added the call to `elem.set_onclick`, 
-which corresponds to `elem.onclick =` in JavaScript. 
-Note how we pass `set_onclick` a `Some` variant because `onclick` itself can be null 
-or undefined in JavaScript and, therefore, can be `None` in Rust and is an `Option` type. 
 
-We then pass it `on_click.as_ref().unchecked_ref()`, which is the pattern 
-we've used several times to turn Closure into a function that `web-sys` can use.
+Before we dig into the actual implementation, which is fairly long, let's go over the design
+we're implementing.
 
-Finally, we also make sure to forget the `on_click` handler. Without this, when we
-actually make this callback, the program will crash because `on_click` hasn't been
-properly handed off to JavaScript. We've done this a few times, so I won't belabour the
-point here. 
-Now that we've written all the code, we'll need to show a button and handle the
-response to it, and we need to integrate it into our game. 
-
-Let's figure out how to show the button.
+![Before](./readme_pix/before.png)
 
 
+It's pretty simple, but it doesn't do all that we need it to. Now, let's redesign the state
+machine.
+
+![After](./readme_pix/after.png)
+
+
+Yeah, that's a lot more code, and it doesn't even reflect the details of the implementation,
+or the `From traits` we write to make it easy to convert between the `enum values` and
+`structs`. Writing some macros to handle state machine boilerplate is out of the scope
+of this book, but it's not a bad idea. You might wonder why every state holds its own
+`Walk` instance when every single state has it, and that's because we're going to change
+`Walk` on the transitions and the individual states don't have easy access to the parent
+`WalkTheDogState` container data. However, where possible, we'll move common data
+out of `Walk` and into `WalkTheDogState`.
+
+
+Tip::
+    
+    This section has a lot of code, and the snippets tend to only show a few lines
+    at a time so that it's not too much to process. However, as you're following
+    along, you may wish to reorganize the code to be easier to find. For instance,
+    I prefer to work top-down in the game module, with constants at the top
+    followed by the "biggest" struct , which is WalkTheDog in this case,
+    followed by any code it depends on, so that the call stack flows down the
+    page. This is how https://github.com/PacktPublishing/
+    Game-Development-with-Rust-and-WebAssembly/tree/
+    chapter_8 is organized. You're also welcome to start breaking this up into
+    more files. I won't, to make it easier to explain in book form.
+    
 
 
 ---------
