@@ -954,9 +954,107 @@ as we break it up into chunks and spread it around.
 
 #### Re-implementing draw
 
+Now, we've removed all the compiler errors in the original update method, in part
+by removing a large chunk of its functionality, and we can continue by updating the
+Walking state to ensure that it's working, but I believe that's a long time without any
+meaningful feedback from the game. 
+After all, at this point, the game doesn't compile and doesn't draw. 
+How do we know anything is working? 
+
+Let's instead take a moment and update the Game `draw` method so that we can actually 
+get the code to compile again and see how it's working.
+
+The draw method will start by taking a page from the update method and replacing
+its current implementation with a delegation to WalkTheDogStateMachine , as shown here:
+
+```rust
+// src/game.rs
+
+impl Game for WalkTheDog {
+    ...
+    fn draw(&self, renderer: &Renderer) {
+        renderer.clear(&Rect::new(Point { x: 0, y: 0 }, 600, 600));
+
+        if let Some(machine) = &self.machine {
+            machine.draw(renderer);
+        }
+    }
+}
+```
+
+There are two things that are a little different from the changes we made to update. 
+
+The first is that we only borrow `self.machine` because we don't need mutable access. 
+
+We also still clear the screen at the top of draw. 
+That happens on every state change, so there's no reason to not just do it then. 
+Besides, it will help us debug if we make any mistakes, since the screen will turn white.
+
+Let's continue the delegation by adding a `draw` method to `WalkTheDogStateMachine`
+that can extract the `state` from each case for `drawing`, as shown here:
 
 
+```rust
+// src/game.rs
 
+
+impl WalkTheDogStateMachine {
+    ...
+    fn draw(&self, renderer: &Renderer) {
+        match self {
+            WalkTheDogStateMachine::Ready(state) => state.draw(renderer),
+            WalkTheDogStateMachine::Walking(state) => state.draw(renderer),
+            WalkTheDogStateMachine::GameOver(state) => state.draw(renderer),
+        }
+    }
+}
+```
+This is virtually identical to the update method we wrote earlier, except on a borrowed
+self instead of consuming self . The rest is just delegations to the various states. Unlike
+update, every state draws in the exact same way, so we can fill those in with one method,
+as shown here:
+
+```rust
+// src/game.rs
+
+//REDESIGN this is new.
+struct WalkTheDogState<T> {
+    ...
+}
+
+impl<T> WalkTheDogState<T> {
+    fn draw(&self, renderer: &Renderer) {
+        self.walk.draw(renderer);
+    }
+}
+
+
+```
+
+Any state will delegate draw to `Walk` because the drawing doesn't actually change based
+on state. We can finally go ahead and re-implement the `draw` method, this time on `Walk`,
+as shown here:
+
+
+```rust
+// src/game.rs
+
+impl Walk {
+    fn draw(&self, renderer: &Renderer) {
+        self.backgrounds.iter().for_each(|background| { background.draw(renderer); });
+        self.boy.draw(renderer);
+        self.obstacles.iter().for_each(|obstacle| { obstacle.draw(renderer); });
+    }
+    ...
+}
+
+```
+This code is not new, but I don't blame you if you forgot it. 
+It's our old draw code from Chapter 6, Creating an Endless Runner, 
+only with the walk variable replaced by self . The rest is identical.
+
+At this point, you'll notice something exciting – the code compiles again! 
+But if you look closely at the game, you'll see that it's a little static.
 
 
 ---------
