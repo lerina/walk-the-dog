@@ -787,22 +787,156 @@ impl Walk {
     }//^-- fn generate_next_segment
 }
 
+/* //REDESIGN
 pub enum WalkTheDog {
     Loading,
     Loaded(Walk),
 }
+*/
+//REDESIGN
+pub struct WalkTheDog {
+    machine: Option<WalkTheDogStateMachine>,
+}
 
+//REDESIGN this is new
+enum WalkTheDogStateMachine {
+    Ready(WalkTheDogState<Ready>),
+    Walking(WalkTheDogState<Walking>),
+    GameOver(WalkTheDogState<GameOver>),
+}
+
+
+//REDESIGN this is new
+impl WalkTheDogStateMachine {
+    fn update(self, keystate: &KeyState) -> Self {
+        match self {
+            WalkTheDogStateMachine::Ready(state) => state.update(keystate).into(),
+            WalkTheDogStateMachine::Walking(state) => state.update(keystate).into(),
+            WalkTheDogStateMachine::GameOver(state) => state.update().into(),
+        }
+    }
+}
+
+//REDESIGN this is new.
+struct WalkTheDogState<T> {
+    _state: T,
+    walk: Walk,
+}
+
+//REDESIGN this is new.
+struct Ready;
+//REDESIGN this is new.
+struct Walking;
+//REDESIGN this is new.
+struct GameOver;
+
+//REDESIGN this is new.
+impl WalkTheDogState<Ready> {
+    fn update(self, keystate: &KeyState) -> WalkTheDogState<Ready> {
+        self
+    }
+    fn start_running(mut self) -> WalkTheDogState<Walking> {
+        self.run_right();
+
+        WalkTheDogState {
+            _state: Walking,
+            walk: self.walk,
+        }
+    }
+    fn run_right(&mut self) {
+        self.walk.boy.run_right();
+    }
+}
+
+//REDESIGN this is new.
+impl WalkTheDogState<Walking> {
+    /* //Dummy
+    fn update(self, keystate: &KeyState) -> WalkTheDogState<Walking> {
+        self
+    }
+    */
+    fn update(self, keystate: &KeyState) -> ReadyEndState {
+        if keystate.is_pressed("ArrowRight") {
+            ReadyEndState::Complete(self.start_running())
+        } else {
+            ReadyEndState::Continue(self)
+        }
+    }
+}
+
+//REDESIGN this is new.
+impl WalkTheDogState<GameOver> {
+    fn update(self) -> WalkTheDogState<GameOver> {
+        self
+    }
+}
+
+//REDESIGN this is new.
+impl From<WalkTheDogState<Ready>> for WalkTheDogStateMachine {
+    fn from(state: WalkTheDogState<Ready>) -> Self {
+        WalkTheDogStateMachine::Ready(state)
+    }
+}
+
+//REDESIGN this is new.
+impl From<WalkTheDogState<Walking>> for WalkTheDogStateMachine {
+    fn from(state: WalkTheDogState<Walking>) -> Self {
+        WalkTheDogStateMachine::Walking(state)
+    }
+}
+
+//REDESIGN this is new.
+impl From<WalkTheDogState<GameOver>> for WalkTheDogStateMachine {
+    fn from(state: WalkTheDogState<GameOver>) -> Self {
+        WalkTheDogStateMachine::GameOver(state)
+    }
+}
+
+//REDESIGN this is new.
+enum ReadyEndState {
+    Complete(WalkTheDogState<Walking>),
+    Continue(WalkTheDogState<Ready>),
+}
+
+//REDESIGN this is new.
+impl From<ReadyEndState> for WalkTheDogStateMachine {
+    fn from(state: ReadyEndState) -> Self {
+        match state {
+            ReadyEndState::Complete(walking) => walking.into(),
+            ReadyEndState::Continue(ready) => ready.into(),
+        }
+    }
+}
+
+/* //REDESIGN
 impl WalkTheDog {
     pub fn new() -> Self {
         WalkTheDog::Loading {}
     }
 }
+*/
 
+//REDESIGN
+impl WalkTheDog {
+    pub fn new() -> Self {
+        WalkTheDog { machine: None }
+    }
+}
+
+/* //REDESIGN
 #[async_trait(?Send)]
 impl Game for WalkTheDog {
     async fn initialize(&self) -> Result<Box<dyn Game>> {
         match self {
-            WalkTheDog::Loading => {
+*/
+//REDESIGN
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    async fn initialize(&self) -> Result<Box<dyn Game>> {
+        match self.machine {
+            //WalkTheDog::Loading => {
+            None => {         
+                
                 let sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
                 
                 let audio = Audio::new()?;
@@ -831,6 +965,28 @@ impl Game for WalkTheDog {
                 
                 let starting_obstacles = stone_and_platform(stone.clone(), sprite_sheet.clone(), 0);
                 let timeline = rightmost(&starting_obstacles);
+                
+                let machine = WalkTheDogStateMachine::Ready(WalkTheDogState {
+                        _state: Ready,
+                        walk: Walk {
+                            boy: rhb,
+                            backgrounds: [
+                                Image::new(background.clone(),
+                                Point { x: 0, y: 0 }),
+                                Image::new(
+                                    background,
+                                    Point {
+                                        x: background_width,
+                                        y: 0,
+                                    },
+                                ),
+                            ],
+                            obstacles: starting_obstacles,
+                            obstacle_sheet: sprite_sheet,
+                            stone,
+                            timeline,
+                        },
+            	});
 
                 let backgrounds = [ Image::new( background.clone(), Point { x: 0, y: 0 }),
                                     Image::new( background, Point { x: background_width, y: 0,},),
@@ -845,14 +1001,23 @@ impl Game for WalkTheDog {
                                     timeline: timeline,
                                 };
 
-                Ok(Box::new(WalkTheDog::Loaded(walk)))
+                //Ok(Box::new(WalkTheDog::Loaded(walk)))
+                Ok(Box::new(WalkTheDog { machine: Some(machine),}))
+
             },
-            WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized")),
+            //WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized")),
+            Some(_) => Err(anyhow!("Error: Game is already initialized!")),
         }
     }//^-- async fn initialize
-
+    
+    /* //REDESIGN
     fn update(&mut self, keystate: &KeyState) {
         if let WalkTheDog::Loaded(walk) = self {
+    *//
+    fn update(&mut self, keystate: &KeyState) {
+        if let Some(machine) = self.machine.take() {
+            self.machine.replace(machine.update(keystate));
+
             if keystate.is_pressed("ArrowRight") {
                 walk.boy.run_right();
             }
@@ -892,6 +1057,8 @@ impl Game for WalkTheDog {
                 walk.timeline += velocity;
             }
         }
+        //REDESIGN
+        assert!(self.machine.is_some());
     }
 
 
