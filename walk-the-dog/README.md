@@ -905,6 +905,7 @@ impl WalkTheDogState<Ready> {
 ```
 
 Let's refresh our memory on these. 
+
 Every state transition is written as a method on the various `typestates` – in this case, 
 `WalkTheDogState<Ready>`, where the source state is `self` and the return value is the destination state. 
 Here, we transition from `Ready` to `Walking` by writing a method called `start_running`.
@@ -1055,6 +1056,10 @@ only with the walk variable replaced by self . The rest is identical.
 
 At this point, you'll notice something exciting – the code compiles again! 
 But if you look closely at the game, you'll see that it's a little static.
+
+Red Hat Boy has stopped animating! He doesn't do his little idle animation because
+we're not calling update like we used to; it's almost time to go back to fixing the
+update method.
 
 
 ---------
