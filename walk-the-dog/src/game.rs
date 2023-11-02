@@ -7,7 +7,8 @@ use rand::prelude::{thread_rng, Rng};
 use self::red_hat_boy_states::*;
 use crate::{
     browser,
-    engine::{self, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet, Sound, Audio},
+    engine::{ self, Cell, Game, Image, KeyState, Point, Rect, 
+              Renderer, Sheet, SpriteSheet, Sound, Audio},
     segments::{stone_and_platform, platform_and_stone,},
 };
 
@@ -167,15 +168,7 @@ pub struct RedHatBoy {
 }
 
 impl RedHatBoy {
-    /*
-    fn new(sprite_sheet: Sheet, image: HtmlImageElement) -> Self {
-        RedHatBoy {
-            state_machine: RedHatBoyStateMachine::Idle(RedHatBoyState::new()),
-            sprite_sheet,
-            image,
-        }
-    }
-    */
+ 
     fn new(sprite_sheet: Sheet, image: HtmlImageElement, audio: Audio, sound: Sound) -> Self {
         RedHatBoy {
             state_machine: RedHatBoyStateMachine::Idle(RedHatBoyState::new(audio, sound)),
@@ -185,7 +178,6 @@ impl RedHatBoy {
     }
 
     fn run_right(&mut self) {
-        //self.state_machine = self.state_machine.transition(Event::Run);
         self.state_machine = self.state_machine.clone().transition(Event::Run);
     }
 
@@ -452,7 +444,7 @@ mod red_hat_boy_states {
     //#[derive(Copy, Clone)]
     #[derive(Clone)]
     pub struct RedHatBoyState<S> {
-        context: RedHatBoyContext,
+        context: RedHatBoyContext, // not Copy
         _state: S,
     }
 
@@ -470,7 +462,6 @@ mod red_hat_boy_states {
     pub struct Idle;
 
     impl RedHatBoyState<Idle> {
-        //pub fn new() -> Self {
         pub fn new(audio: Audio, jump_sound: Sound) -> Self {
 
             RedHatBoyState {
@@ -516,14 +507,6 @@ mod red_hat_boy_states {
             self
         }
 
-        /*
-        pub fn jump(self) -> RedHatBoyState<Jumping> {
-            RedHatBoyState {
-                context: self.context.reset_frame().set_vertical_velocity(JUMP_SPEED),
-                _state: Jumping {},
-            }
-        }
-       */
         pub fn jump(self) -> RedHatBoyState<Jumping> {
             RedHatBoyState {
                 context: self
@@ -572,7 +555,6 @@ mod red_hat_boy_states {
             self.update_context(JUMPING_FRAMES);
 
             if self.context.position.y >= FLOOR {
-                //JumpingEndState::Landing(self.land())
                 JumpingEndState::Landing(self.land_on(HEIGHT.into()))
             } else {
                 JumpingEndState::Jumping(self)
@@ -794,27 +776,20 @@ impl Walk {
 
 }
 
-/* //REDESIGN
-pub enum WalkTheDog {
-    Loading,
-    Loaded(Walk),
-}
-*/
-//REDESIGN
 pub struct WalkTheDog {
     machine: Option<WalkTheDogStateMachine>,
 }
 
-//REDESIGN this is new
 enum WalkTheDogStateMachine {
     Ready(WalkTheDogState<Ready>),
     Walking(WalkTheDogState<Walking>),
     GameOver(WalkTheDogState<GameOver>),
 }
 
-
-//REDESIGN this is new
 impl WalkTheDogStateMachine {
+    fn new(walk: Walk) -> Self {
+        WalkTheDogStateMachine::Ready(WalkTheDogState::new(walk))
+    }
     fn update(self, keystate: &KeyState) -> Self {
         match self {
             WalkTheDogStateMachine::Ready(state) => state.update(keystate).into(),
@@ -831,7 +806,6 @@ impl WalkTheDogStateMachine {
     }
 }
 
-//REDESIGN this is new.
 struct WalkTheDogState<T> {
     _state: T,
     walk: Walk,
@@ -844,14 +818,10 @@ impl<T> WalkTheDogState<T> {
     }
 }
 
-//REDESIGN this is new.
 struct Ready;
-//REDESIGN this is new.
 struct Walking;
-//REDESIGN this is new.
 struct GameOver;
 
-//REDESIGN this is new.
 impl WalkTheDogState<Ready> {
     fn new(walk: Walk) -> WalkTheDogState<Ready> {
         WalkTheDogState {
@@ -883,28 +853,7 @@ impl WalkTheDogState<Ready> {
     }
 }
 
-/*
-impl WalkTheDogState<Ready> {
-    fn update(self, keystate: &KeyState) -> WalkTheDogState<Ready> {
-        self
-    }
-    fn start_running(mut self) -> WalkTheDogState<Walking> {
-        self.run_right();
-
-        WalkTheDogState {
-            _state: Walking,
-            walk: self.walk,
-        }
-    }
-    fn run_right(&mut self) {
-        self.walk.boy.run_right();
-    }
-}
-*/
-
-//REDESIGN this is new.
 impl WalkTheDogState<Walking> {
-    //Dummy
     fn update(self, keystate: &KeyState) -> WalkTheDogState<Walking> {
         self
     }
@@ -912,41 +861,35 @@ impl WalkTheDogState<Walking> {
 
 }
 
-//REDESIGN this is new.
 impl WalkTheDogState<GameOver> {
     fn update(self) -> WalkTheDogState<GameOver> {
         self
     }
 }
 
-//REDESIGN this is new.
 impl From<WalkTheDogState<Ready>> for WalkTheDogStateMachine {
     fn from(state: WalkTheDogState<Ready>) -> Self {
         WalkTheDogStateMachine::Ready(state)
     }
 }
 
-//REDESIGN this is new.
 impl From<WalkTheDogState<Walking>> for WalkTheDogStateMachine {
     fn from(state: WalkTheDogState<Walking>) -> Self {
         WalkTheDogStateMachine::Walking(state)
     }
 }
 
-//REDESIGN this is new.
 impl From<WalkTheDogState<GameOver>> for WalkTheDogStateMachine {
     fn from(state: WalkTheDogState<GameOver>) -> Self {
         WalkTheDogStateMachine::GameOver(state)
     }
 }
 
-//REDESIGN this is new.
 enum ReadyEndState {
     Complete(WalkTheDogState<Walking>),
     Continue(WalkTheDogState<Ready>),
 }
 
-//REDESIGN this is new.
 impl From<ReadyEndState> for WalkTheDogStateMachine {
     fn from(state: ReadyEndState) -> Self {
         match state {
@@ -956,37 +899,19 @@ impl From<ReadyEndState> for WalkTheDogStateMachine {
     }
 }
 
-/* //REDESIGN
-impl WalkTheDog {
-    pub fn new() -> Self {
-        WalkTheDog::Loading {}
-    }
-}
-*/
-
-//REDESIGN
 impl WalkTheDog {
     pub fn new() -> Self {
         WalkTheDog { machine: None }
     }
 }
 
-/* //REDESIGN
-#[async_trait(?Send)]
-impl Game for WalkTheDog {
-    async fn initialize(&self) -> Result<Box<dyn Game>> {
-        match self {
-*/
-//REDESIGN
 #[async_trait(?Send)]
 impl Game for WalkTheDog {
     async fn initialize(&self) -> Result<Box<dyn Game>> {
         match self.machine {
-            //WalkTheDog::Loading => {
             None => {         
                 
-                let sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;
-                
+                let sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;               
                 let audio = Audio::new()?;
                 let sound = audio.load_sound("../resources/sound/SFX_Jump_23.mp3").await?;
                 let background_music = audio.load_sound("../resources/sound/background_song.mp3").await?;
@@ -994,7 +919,6 @@ impl Game for WalkTheDog {
                 //play it immediately and drive people nuts                
                 audio.play_looping_sound(&background_music)?;
 
-                //let rhb = RedHatBoy::new(sheet, engine::load_image("../resources/pix/rhb.png").await?);
                 let rhb = RedHatBoy::new(sheet, 
                                          engine::load_image("../resources/pix/rhb.png").await?,
                                          audio,
@@ -1014,23 +938,14 @@ impl Game for WalkTheDog {
                 let starting_obstacles = stone_and_platform(stone.clone(), sprite_sheet.clone(), 0);
                 let timeline = rightmost(&starting_obstacles);
                 
-                /*                
-                let backgrounds = [ Image::new( background.clone(), Point { x: 0, y: 0 }),
-                                    Image::new( background, Point { x: background_width, y: 0,},),
-                                  ];
-
-                let walk = Walk {   boy: rhb, 
-                                    backgrounds: backgrounds,
-                                    obstacles: starting_obstacles,
-                                    obstacle_sheet: sprite_sheet,
-
-                                    stone: stone, 
-                                    timeline: timeline,
-                                };
-                */
+                /*
                 let machine = WalkTheDogStateMachine::Ready(WalkTheDogState {
                         _state: Ready,
                         walk: Walk {
+                */
+
+                let machine = WalkTheDogStateMachine::new(
+                        Walk {
                             boy: rhb,
                             backgrounds: [
                                 Image::new(background.clone(),
@@ -1048,91 +963,21 @@ impl Game for WalkTheDog {
                             stone,
                             timeline,
                         },
-            	});
+            	);  //});
 
-                
-                //Ok(Box::new(WalkTheDog::Loaded(walk)))
                 Ok(Box::new(WalkTheDog { machine: Some(machine),}))
-
             },
-            //WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized")),
             Some(_) => Err(anyhow!("Error: Game is already initialized!")),
         }
     }//^-- async fn initialize
     
-    /* //REDESIGN
-    fn update(&mut self, keystate: &KeyState) {
-        if let WalkTheDog::Loaded(walk) = self {
-    */
     fn update(&mut self, keystate: &KeyState) {
         if let Some(machine) = self.machine.take() {
             self.machine.replace(machine.update(keystate));
         }
-      //REDESIGN
         assert!(self.machine.is_some());
-  
-/*
-            if keystate.is_pressed("ArrowRight") {
-                walk.boy.run_right();
-            }
-
-            if keystate.is_pressed("Space") {
-                walk.boy.jump();
-            }
-
-            if keystate.is_pressed("ArrowDown") {
-                walk.boy.slide();
-            }
-
-            walk.boy.update();
-
-            let velocity = walk.velocity();
-            let [first_background, second_background] = &mut walk.backgrounds;
-            first_background.move_horizontally(velocity);
-            second_background.move_horizontally(velocity);
-
-            if first_background.right() < 0 {
-                first_background.set_x(second_background.right());
-            }
-            if second_background.right() < 0 {
-                second_background.set_x(first_background.right());
-            }
-
-            walk.obstacles.retain(|obstacle| obstacle.right() > 0);
-
-            walk.obstacles.iter_mut().for_each(|obstacle| {
-                obstacle.move_horizontally(velocity);
-                obstacle.check_intersection(&mut walk.boy);
-            });
-
-            if walk.timeline < TIMELINE_MINIMUM {
-                walk.generate_next_segment();
-            } else {
-                walk.timeline += velocity;
-            }
-        }
-*/
     }//^-- fn update
 
-    /* //REDESIGN
-    fn draw(&self, renderer: &Renderer) {
-        renderer.clear(&Rect::new(Point { x: 0, y: 0 }, 600, HEIGHT));
-
-        if let WalkTheDog::Loaded(walk) = self {
-            walk.backgrounds.iter().for_each(|background| {
-                background.draw(renderer);
-            });
-
-            walk.boy.draw(renderer);
-            walk.boy.draw_rect(renderer);
-
-            walk.obstacles.iter().for_each(|obstacle| {
-                obstacle.draw(renderer);
-            });
-        }
-    }
-    */
-    //REDESIGN
     fn draw(&self, renderer: &Renderer) {
         renderer.clear(&Rect::new(Point { x: 0, y: 0 }, 600, 600));
 
