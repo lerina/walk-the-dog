@@ -312,10 +312,142 @@ impl Game for WalkTheDog {
                             stone,
                             timeline,
                         },
-            	});
-
+            	);
 
 ```
+
+It's a small change, but makes it both easier to read and safer, too. Doing the right thing,
+creating `WalkTheDogStateMachine` in the `Ready` state is easy to do, and creating it in
+the wrong state is not.
+
+Now that we've finished that little digression, we can go back to finishing the update
+method as planned.
+
+
+### Finishing update
+
+This segment of the original update function in Game reveals what is missing from our
+current code:
+
+```
+impl Game for WalkTheDog {
+    ...
+    fn update(&mut self, keystate: &KeyState) {
+        if let WalkTheDog::Loaded(walk) = self {
+            ...
+            if keystate.is_pressed("ArrowDown") {
+                walk.boy.slide();
+            }
+            walk.boy.update();
+            ...
+```
+
+Immediately after all the checks for button presses, we were updating boy. 
+Let's go ahead and add that to our new version of the `update` function in the `WalkTheDogState<Ready>`
+implementation, like so:
+
+```rust
+// src/game.rs
+
+impl WalkTheDogState<Ready> {
+    ...
+    fn update(mut self, keystate: &KeyState) -> ReadyEndState {
+        self.walk.boy.update();
+
+        if keystate.is_pressed("ArrowRight") {
+            ReadyEndState::Complete(self.start_running())
+        } else {
+            ReadyEndState::Continue(self)
+        }
+    }
+...
+```
+
+There are two changes here,  
+so don't forget to change `update` to accept `mut self` now  instead of `self`. 
+It's hiding there in the function signature. 
+
+Also, we've added a call to `self.walk.boy.update()` to start updating the boy again.
+
+Do that and you'll see RHB idling again, ready to start chasing down his invisible dog.
+
+But if you hit the right arrow, `RHB` freezes, one frame into his running animation. 
+That is not what we want, and intriguingly, there are no errors in the console log because no
+exceptions are being thrown. It's just that the `Walking` state doesn't do anything in its
+update function. 
+
+We can restore that code by putting back some of the code we earlier commented 
+out/copied/deleted into the `Walking` state of the game, as shown here:
+
+```rust
+// src/game.rs
+
+impl WalkTheDogState<Walking> {
+    ...
+    fn update(mut self, keystate: &KeyState) -> WalkTheDogState<Walking> {
+        if keystate.is_pressed("Space") {
+            self.walk.boy.jump();
+        }
+
+        if keystate.is_pressed("ArrowDown") {
+            self.walk.boy.slide();
+        }
+
+        self.walk.boy.update();
+
+        let walking_speed = self.walk.velocity();
+        
+        let [first_background, second_background] = &mut self.walk.backgrounds;
+        first_background.move_horizontally(walking_speed);
+        second_background.move_horizontally(walking_speed);
+
+        if first_background.right() < 0 {
+            first_background.set_x(second_background.right());
+        }
+        if second_background.right() < 0 {
+            second_background.set_x(first_background.right());
+        }
+
+        self.walk.obstacles.retain(|obstacle| obstacle.right() > 0);
+
+        self.walk.obstacles.iter_mut().for_each(|obstacle| {
+            obstacle.move_horizontally(walking_speed);
+            obstacle.check_intersection(&mut self.walk.boy);
+        });
+
+        if self.walk.timeline < TIMELINE_MINIMUM {
+            self.walk.generate_next_segment();
+        } else {
+            self.walk.timeline += walking_speed;
+        }
+
+        self
+    }
+}
+
+```
+
+In `WalkTheDogState<Walking>`, we've modified the `update` method to take a 
+`mut self` and then restored most of the old Game update code. 
+  
+There are a few changes to make the code fit its new location. 
+Where the original code would read `walk.boy`, it now reads `self.walk.boy`. 
+
+I also took the opportunity to rename `velocity`, which is a little vague, to `walking_speed` 
+to clarify that it refers to how fast `RHB` walks. 
+
+The final change we've made is taking out the `if keystate.is_pressed("ArrowRight")`
+code because there's no reason to check for that keypress anymore. 
+
+Lastly, we return `self` because there's not yet any way to transition out of `WalkTheDogState<Walking>`. 
+
+If you do this all correctly, you'll find that your code compiles and runs! 
+In fact, as of this moment, all of the behavior is restored, including the problem 
+where we have to refresh to start a new game. 
+
+How about we finally add a new game button right now, huh?
+
+
 
 ---------
 
