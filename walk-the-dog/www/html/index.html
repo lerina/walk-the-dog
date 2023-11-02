@@ -2,23 +2,24 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>initial index</title>
+  <title>Wasm no NPM no Webpack</title>
   <link rel="stylesheet" href="../css/styles.css">
   <link rel="icon" href="../favicon_96x96.png">
+  <link rel="preload" as="image" href="../resources/pix/Button.svg">
+  <link rel="preload" as="font"  href="../resources/fonts/kenney_future_narrow-webfont.woff2">
 </head>
 <body>
-<main class="container">
 
+<!--
 <div id="ui" style="position: absolute">
 <button>New Game</button>
 </div>
-
-<canvas id="canvas" tabindex="0" width="600" height="600">
+-->
+  <div id="ui"></div>
+  <canvas id="canvas" style="outline: none" tabindex="0" height="600" width="600">
     Your browser does not support the Canvas.
-</canvas>
+  </canvas>
 
-
-</main>
   <script type="module" src="../js/index.js"></script>
 </body>
 </html>

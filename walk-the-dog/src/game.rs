@@ -3,6 +3,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use web_sys::HtmlImageElement;
 use rand::prelude::{thread_rng, Rng};
+use futures::channel::mpsc::UnboundedReceiver;
 
 use self::red_hat_boy_states::*;
 use crate::{
@@ -11,6 +12,7 @@ use crate::{
               Renderer, Sheet, SpriteSheet, Sound, Audio},
     segments::{stone_and_platform, platform_and_stone,},
 };
+
 
 const HEIGHT: i16 = 600;
 const TIMELINE_MINIMUM: i16 = 1000;
@@ -176,6 +178,15 @@ impl RedHatBoy {
             image,
         }
     }
+    fn reset(boy: Self) -> Self {
+        RedHatBoy::new(
+            boy.sprite_sheet,
+            boy.image,
+            boy.state_machine.context().audio.clone(),
+            boy.state_machine.context().jump_sound.
+            clone(),
+        )
+    }
 
     fn run_right(&mut self) {
         self.state_machine = self.state_machine.clone().transition(Event::Run);
@@ -260,6 +271,9 @@ impl RedHatBoy {
 
     fn knock_out(&mut self) {
         self.state_machine = self.state_machine.clone().transition(Event::KnockOut);
+    }
+    fn knocked_out(&self) -> bool {
+        self.state_machine.knocked_out()
     }
 
     fn land_on(&mut self, position: i16) { 
@@ -348,7 +362,12 @@ impl RedHatBoyStateMachine {
     fn update(self) -> Self {
         self.transition(Event::Update)
     }
-}
+    fn knocked_out(&self) -> bool {
+        // matches! is a macro to check `self` against an enum variant, 
+        // and return whether or not they match.
+        matches!(self, RedHatBoyStateMachine::KnockedOut(_))
+    }
+}//^-- impl RedHatBoyStateMachine
 
 impl From<RedHatBoyState<Idle>> for RedHatBoyStateMachine {
     fn from(state: RedHatBoyState<Idle>) -> Self {
@@ -670,8 +689,8 @@ mod red_hat_boy_states {
         pub frame: u8,
         pub position: Point,
         pub velocity: Point,
-        audio: Audio,
-        jump_sound: Sound,
+        pub audio: Audio,
+        pub jump_sound: Sound,
     }
 
     impl RedHatBoyContext {
@@ -741,6 +760,25 @@ pub struct Walk {
 }
 
 impl Walk {
+    fn reset(walk: Self) -> Self {
+        let starting_obstacles = stone_and_platform(
+                                    walk.stone.clone(),
+                                    walk.obstacle_sheet.clone(), 0);
+        let timeline = rightmost(&starting_obstacles);
+
+        Walk {
+            boy: RedHatBoy::reset(walk.boy), //walk.boy,
+            backgrounds: walk.backgrounds,
+            obstacles: starting_obstacles,
+            obstacle_sheet: walk.obstacle_sheet,
+            stone: walk.stone,
+            timeline,
+        }
+    }
+
+    fn knocked_out(&self) -> bool {
+        self.boy.knocked_out()
+    }
     fn velocity(&self) -> i16 {
         -self.boy.walking_speed()
     }
@@ -820,7 +858,32 @@ impl<T> WalkTheDogState<T> {
 
 struct Ready;
 struct Walking;
-struct GameOver;
+//struct GameOver;
+
+struct GameOver {
+    new_game_event: UnboundedReceiver<()>,
+}
+
+impl GameOver {
+    fn new_game_pressed(&mut self) -> bool {
+        matches!(self.new_game_event.try_next(), Ok(Some(())))
+    }
+}
+
+enum GameOverEndState {
+    Continue(WalkTheDogState<GameOver>),
+    Complete(WalkTheDogState<Ready>),
+}
+
+impl From<GameOverEndState> for WalkTheDogStateMachine {
+    fn from(state: GameOverEndState) -> Self {
+        match state {
+            GameOverEndState::Continue(game_over) => game_over.into(),
+            GameOverEndState::Complete(ready) => ready.into(),
+        }
+    }
+}
+
 
 impl WalkTheDogState<Ready> {
     fn new(walk: Walk) -> WalkTheDogState<Ready> {
@@ -854,11 +917,30 @@ impl WalkTheDogState<Ready> {
 }
 
 impl WalkTheDogState<Walking> {
-/*    fn update(self, keystate: &KeyState) -> WalkTheDogState<Walking> {
-        self
+/*
+    fn end_game(self) -> WalkTheDogState<GameOver> {
+        browser::draw_ui("<button>New Game</button>");
+
+        WalkTheDogState {
+            _state: GameOver,
+            walk: self.walk,
+        }
     }
 */
-    fn update(mut self, keystate: &KeyState) -> WalkTheDogState<Walking> { //WalkingEndState {
+    fn end_game(self) -> WalkTheDogState<GameOver> {
+        let receiver = browser::draw_ui("<button id='new_game'>New Game</button>")
+                            .and_then(|_unit| browser::find_html_element_by_id("new_game"))
+                            .map(|element| engine::add_click_handler(element))
+                            .unwrap();
+
+        WalkTheDogState {
+            //_state: GameOver,
+            _state: GameOver { new_game_event: receiver,},
+            walk: self.walk,
+        }
+    }
+
+    fn update(mut self, keystate: &KeyState) -> WalkingEndState {
         if keystate.is_pressed("Space") {
             self.walk.boy.jump();
         }
@@ -894,17 +976,54 @@ impl WalkTheDogState<Walking> {
             self.walk.timeline += walking_speed;
         }
 
-        self
+        //self
+        if self.walk.knocked_out() {
+            WalkingEndState::Complete(self.end_game())
+        } else {
+            WalkingEndState::Continue(self)
+        }
+    }//^-- fn update
+}//^-- impl WalkTheDogState<Walking> 
+
+enum WalkingEndState {
+    Continue(WalkTheDogState<Walking>),
+    Complete(WalkTheDogState<GameOver>),
+}
+
+impl From<WalkingEndState> for WalkTheDogStateMachine {
+    fn from(state: WalkingEndState) -> Self {
+        match state {
+            WalkingEndState::Continue(walking) => walking.into(),
+            WalkingEndState::Complete(game_over) => game_over.into(),
+        }
     }
-}    
+}
 
 
 
 impl WalkTheDogState<GameOver> {
+/*
     fn update(self) -> WalkTheDogState<GameOver> {
         self
     }
-}
+*/
+    fn update(mut self) -> GameOverEndState {
+        if self._state.new_game_pressed() {
+            GameOverEndState::Complete(self.new_game())
+        } else {
+            GameOverEndState::Continue(self)
+        }
+    }
+
+    fn new_game(self) -> WalkTheDogState<Ready> {
+        browser::hide_ui();
+
+        WalkTheDogState {
+            _state: Ready,
+            walk: Walk::reset(self.walk), //self.walk,
+        }
+    }
+}//^-- impl WalkTheDogState<GameOver>
 
 impl From<WalkTheDogState<Ready>> for WalkTheDogStateMachine {
     fn from(state: WalkTheDogState<Ready>) -> Self {
