@@ -390,7 +390,7 @@ pub struct Audio {
 
 #[derive(Clone)]
 pub struct Sound {
-    buffer: AudioBuffer,
+    pub buffer: AudioBuffer,
 }
 
 

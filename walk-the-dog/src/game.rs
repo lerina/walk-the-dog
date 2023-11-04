@@ -7,6 +7,7 @@ use futures::channel::mpsc::UnboundedReceiver;
 
 use self::red_hat_boy_states::*;
 
+/*
 #[cfg(test)]
 mod test_browser;
 
@@ -15,9 +16,9 @@ use test_browser as browser;
 
 #[cfg(not(test))]
 use crate::browser;
-
+*/
 use crate::{
-    //browser,
+    browser,
     engine::{ self, Cell, Game, Image, KeyState, Point, Rect, 
               Renderer, Sheet, SpriteSheet, Sound, Audio},
     segments::{stone_and_platform, platform_and_stone,},
@@ -1172,6 +1173,11 @@ mod tests {
     use std::collections::HashMap;
     use web_sys::{AudioBuffer, AudioBufferOptions};
 
+    use wasm_bindgen_test::wasm_bindgen_test;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+    
+    //#[test]
+    #[wasm_bindgen_test]
     fn test_transition_from_game_over_to_new_game() {
         let (_, receiver) = unbounded();
         let image = HtmlImageElement::new().unwrap();
@@ -1180,6 +1186,7 @@ mod tests {
         let sound = Sound {
             buffer: AudioBuffer::new(&options).unwrap(),
         };
+
         let rhb = RedHatBoy::new(
             Sheet {
                 frames: HashMap::new(),
@@ -1205,6 +1212,16 @@ mod tests {
             stone: image.clone(),
             timeline: 0,
         };
+        // ASSERTION
+        let document = browser::document().unwrap();
+        document
+            .body()
+            .unwrap()
+            .insert_adjacent_html("afterbegin", "<div id='ui'></div>")
+            .unwrap();
+
+        browser::draw_ui("<p>This is the UI</p>").unwrap();
+
         let state = WalkTheDogState {
             _state: GameOver {
                 new_game_event: receiver,

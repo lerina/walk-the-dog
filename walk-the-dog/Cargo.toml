@@ -43,6 +43,7 @@ features = ["console",
             "AudioBuffer",
             "AudioBufferSourceNode",
             "AudioDestinationNode",
+            "AudioBufferOptions",
            ]
           
 

@@ -573,6 +573,127 @@ Still waiting but See: [Mock Objects (manually) in Rust](https://paytonrules.com
 
 Instead, we'll test this code via a test that runs in the browser.
 
+#### Browser tests
+
+At the beginning of this chapter, I mentioned that there were *unit tests* and *browser tests*.
+The distinction is that while browser tests may test the same behavior as a unit test, they
+automate the desired behavior in a headless browser.  
+This makes the test more realistic, but also slower and more prone to breaking for flaky reasons. 
+
+I prefer my systems to have a large base of unit tests and a smaller number of more integrated tests 
+to make sure everything is all wired together correctly, but we can't always get what we want.
+
+Instead, we'll get what we need – verification of the behavior – by skipping dependency-breaking techniques 
+for legacy code and writing a test that runs in the browser. 
+
+We'll remove the code that added the `test_browser` module, as well as the `test_browser` file itself. 
+
+We'll keep the test we wrote previously and make two changes for it to compile, as follows:
+
+1. Add `AudioBufferOptions` to the list of `web-sys` features in `Cargo.toml`.
+
+```toml
+[dependencies.web-sys]
+version = "0.3.64"
+features = ["console",
+            ...
+            "AudioDestinationNode",
+            "AudioBufferOptions",
+           ]
+
+```
+
+2. In the `engine` module, make the `buffer` field on the `Sound` struct `public` so that
+we can create `Sound` directly in this test.
+
+```rust
+// src/engine.rs
+
+
+#[derive(Clone)]
+pub struct Sound {
+    //buffer: AudioBuffer,
+    pub buffer: AudioBuffer,
+
+}
+
+```
+
+These two changes will get the code compiling, but it won't make it run in the tests yet.
+For that, we need to make a couple of changes. 
+
+First, we need to change the `#[test]` macro to `#[wasm_bindgen_test]`. 
+Then, we need to add two statements to our `test` module, as shown here:
+
+```rust
+// src/game.rs
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::channel::mpsc::unbounded;
+    use std::collections::HashMap;
+    use web_sys::{AudioBuffer, AudioBufferOptions};
+
+    use wasm_bindgen_test::wasm_bindgen_test;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    //#[test]
+    #[wasm_bindgen_test]
+    fn test_transition_from_game_over_to_new_game() {
+        ...
+
+```
+
+The first line to add is `use wasm_bindgen_test::wasm_bindgen_test` so that
+the macro is present. 
+
+The second is `wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);`. 
+This directive tells the test runner to run in the browser so that the code 
+can interact with the DOM, similar to how the application does. 
+
+This test won't run in cargo test, 
+so you'll need to use the `wasm-pack test --headless` `–chrome` or `-firefox` command. 
+
+This will run the web tests in a headless version of the browser. 
+
+When you run them, you should see the following output:
+
+```
+
+```
+
+```rust
+// src/game.rs
+
+...
+#[cfg(test)]
+mod tests {
+    ...
+    #[wasm_bindgen_test]
+    fn test_transition_from_game_over_to_new_game() {
+            ...
+            timeline: 0,
+        };
+        // ASSERTION
+        let document = browser::document().unwrap();
+        document
+            .body()
+            .unwrap()
+            .insert_adjacent_html("afterbegin", "<div id='ui'></div>")
+            .unwrap();
+
+        browser::draw_ui("<p>This is the UI</p>").unwrap();
+
+        let state = WalkTheDogState {
+            _state: GameOver {
+                new_game_event: receiver,
+            },
+            walk: walk,
+        };
+    }//^-- fn test_transition_from_game_over_to_new_game
+}//-- mod tests
+```
 
 ---------
 
