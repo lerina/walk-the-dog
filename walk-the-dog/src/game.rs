@@ -6,8 +6,18 @@ use rand::prelude::{thread_rng, Rng};
 use futures::channel::mpsc::UnboundedReceiver;
 
 use self::red_hat_boy_states::*;
+
+#[cfg(test)]
+mod test_browser;
+
+#[cfg(test)]
+use test_browser as browser;
+
+#[cfg(not(test))]
+use crate::browser;
+
 use crate::{
-    browser,
+    //browser,
     engine::{ self, Cell, Game, Image, KeyState, Point, Rect, 
               Renderer, Sheet, SpriteSheet, Sound, Audio},
     segments::{stone_and_platform, platform_and_stone,},
@@ -1152,3 +1162,55 @@ fn rightmost(obstacle_list: &Vec<Box<dyn Obstacle>>) -> i16 {
         .max_by(|x, y| x.cmp(&y))
         .unwrap_or(0)
 }
+
+//================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::channel::mpsc::unbounded;
+    use std::collections::HashMap;
+    use web_sys::{AudioBuffer, AudioBufferOptions};
+
+    fn test_transition_from_game_over_to_new_game() {
+        let (_, receiver) = unbounded();
+        let image = HtmlImageElement::new().unwrap();
+        let audio = Audio::new().unwrap();
+        let options = AudioBufferOptions::new(1, 3000.0);
+        let sound = Sound {
+            buffer: AudioBuffer::new(&options).unwrap(),
+        };
+        let rhb = RedHatBoy::new(
+            Sheet {
+                frames: HashMap::new(),
+            },
+            image.clone(),
+            audio,
+            sound,
+        );
+        let sprite_sheet = SpriteSheet::new(
+            Sheet {
+                frames: HashMap::new(),
+            },
+            image.clone(),
+        );
+        let walk = Walk {
+            boy: rhb,
+            backgrounds: [
+                Image::new(image.clone(), Point { x: 0, y: 0 }),
+                Image::new(image.clone(), Point { x: 0, y: 0 }),
+            ],
+            obstacles: vec![],
+            obstacle_sheet: Rc::new(sprite_sheet),
+            stone: image.clone(),
+            timeline: 0,
+        };
+        let state = WalkTheDogState {
+            _state: GameOver {
+                new_game_event: receiver,
+            },
+            walk: walk,
+        };
+    }//^-- fn test_transition_from_game_over_to_new_game
+}//-- mod tests
+
