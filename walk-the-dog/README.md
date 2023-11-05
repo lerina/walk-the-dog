@@ -512,13 +512,31 @@ mod tests {
 }//-- mod tests 
 ```
 
-NOTE:
+---
+
+NOTE:  
 There is a typo in the book that breaks the test.
-it shoud be:
+
+```
+test walk_the_dog::game::tests::test_transition_from_game_over_to_new_game ... FAIL
+
+failures:
+
+---- walk_the_dog::game::tests::test_transition_from_game_over_to_new_game output ----
+error output:
+    panicked at src/game.rs:1119:48:
+    called `Result::unwrap()` on an `Err` value: 
+    JsValue(NotSupportedError: AudioBuffer constructor: Sample rate (3000) is out of range
+
+```
+
+the sample rate  should be:
 
 ```
 let options = AudioBufferOptions::new(1, 30000.0); // 3000.0);
 ```
+
+---
 
 Oh boy – that's a lot of code to test a few lines of Rust, and it's not even a complete test yet.
 It's just setting up the game in the state that we need it to be in before we transition into
@@ -633,7 +651,14 @@ These two changes will get the code compiling, but it won't make it run in the t
 For that, we need to make a couple of changes. 
 
 First, we need to change the `#[test]` macro to `#[wasm_bindgen_test]`. 
-Then, we need to add two statements to our `test` module, as shown here:
+Then, we need to add two statements to our `test` module.
+
+```
+    use wasm_bindgen_test::wasm_bindgen_test;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+```
+
+As shown here:
 
 ```rust
 // src/game.rs
@@ -667,11 +692,26 @@ so you'll need to use the `wasm-pack test --headless` `–chrome` or `-firefox` 
 
 This will run the web tests in a headless version of the browser. 
 
+`$ wasm-pack test --headless --firefox`
+
 When you run them, you should see the following output:
 
 ```
+...
+running 1 test                                    
 
+test walk_the_dog::game::tests::test_transition_from_game_over_to_new_game ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored
+
+...
 ```
+
+Now, we have a test that's running and passing, but the only problem is that we don't
+have any assertions. We've written an "arrange" step but we haven't checked the results.
+The point of this test was to make sure that the UI was hidden when the state transition
+happened, so we'll need to update the test to check that. We can do this by adding the
+action and assertion steps, as shown here:
 
 ```rust
 // src/game.rs
@@ -701,9 +741,74 @@ mod tests {
             },
             walk: walk,
         };
+        
+        // ASSERTION
+        state.new_game();
+        let ui = browser::find_html_element_by_id("ui").unwrap();
+        assert_eq!(ui.child_element_count(), 0);
+
     }//^-- fn test_transition_from_game_over_to_new_game
 }//-- mod tests
 ```
+
+Here, we start the test by inserting the `div` property, along with the `ui ID`, 
+into the document – after all, that is in `index.html` in the game. 
+
+Then, `browser::draw_ui` draws the `UI` to the browser, even though the browser 
+is running headlessly, so we don't see it. 
+
+We continue by creating `WalkTheDogState` in the `GameOver` state; on the next
+line, we have it transition to `Ready` via the `state.new_game()` method. 
+
+Finally, we check that the `UI` was cleared by finding the `div` property 
+and checking its `child_element_count`. If it's 0, the code is right, and this test will pass. 
+
+If you run this test, you'll see that this test does pass, so you will probably want to comment out 
+the `let next_state: WalkTheDogState<Ready> = state.new_game ()` line 
+and run it again just to make sure it fails when the transition happens.
+
+NOTE: 
+Bad book editing. Make it fait by commenting  `state.new_game()`.
+
+as in 
+
+```rust
+...
+        //state.new_game();
+        let ui = browser::find_html_element_by_id("ui").unwrap();
+        assert_eq!(ui.child_element_count(), 0);
+...
+```
+
+Test output:
+
+```
+test walk_the_dog::game::tests::test_transition_from_game_over_to_new_game ... FAIL
+
+failures:
+
+---- walk_the_dog::game::tests::test_transition_from_game_over_to_new_game output ----
+    error output:
+        panicked at src/game.rs:1235:9:
+        assertion `left == right` failed
+          left: 1
+         right: 0
+
+```
+
+This is still a very long test but at least it's working. 
+
+The test can be cleaned up by creating some factory methods in the various modules 
+so that structs are easier to create. 
+You'll notice that the test is full of unwrap calls. 
+This is because, in a test, I want things to crash right away if they aren't as expected. 
+
+Unfortunately, browser-based tests with the `wasm_bindgen_test` macro do not let 
+you return a `Result` for readability as standard Rust tests do yet. 
+This is another reason you should try and make your tests run as native Rust tests.
+
+
+
 
 ---------
 
