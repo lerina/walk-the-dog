@@ -1174,19 +1174,18 @@ mod tests {
     use web_sys::{AudioBuffer, AudioBufferOptions};
 
     use wasm_bindgen_test::wasm_bindgen_test;
+
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
-    
-    //#[test]
+
     #[wasm_bindgen_test]
     fn test_transition_from_game_over_to_new_game() {
         let (_, receiver) = unbounded();
         let image = HtmlImageElement::new().unwrap();
         let audio = Audio::new().unwrap();
-        let options = AudioBufferOptions::new(1, 3000.0);
+        let options = AudioBufferOptions::new(1, 30000.0); //44100
         let sound = Sound {
             buffer: AudioBuffer::new(&options).unwrap(),
         };
-
         let rhb = RedHatBoy::new(
             Sheet {
                 frames: HashMap::new(),
@@ -1212,6 +1211,7 @@ mod tests {
             stone: image.clone(),
             timeline: 0,
         };
+
         // ASSERTION
         let document = browser::document().unwrap();
         document

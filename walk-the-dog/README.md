@@ -471,7 +471,9 @@ mod tests {
         let (_, receiver) = unbounded();
         let image = HtmlImageElement::new().unwrap();
         let audio = Audio::new().unwrap();
-        let options = AudioBufferOptions::new(1, 3000.0);
+                                                // TYPO in BOOK
+        let options = AudioBufferOptions::new(1, 30000.0); // 3000.0);
+        //let options = AudioBufferOptions::new(1, 44100.0);
         let sound = Sound {
             buffer: AudioBuffer::new(&options).unwrap(),
         };
@@ -508,6 +510,14 @@ mod tests {
         };
     }//^-- fn test_transition_from_game_over_to_new_game
 }//-- mod tests 
+```
+
+NOTE:
+There is a typo in the book that breaks the test.
+it shoud be:
+
+```
+let options = AudioBufferOptions::new(1, 30000.0); // 3000.0);
 ```
 
 Oh boy – that's a lot of code to test a few lines of Rust, and it's not even a complete test yet.
