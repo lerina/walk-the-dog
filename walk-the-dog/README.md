@@ -807,8 +807,104 @@ Unfortunately, browser-based tests with the `wasm_bindgen_test` macro do not let
 you return a `Result` for readability as standard Rust tests do yet. 
 This is another reason you should try and make your tests run as native Rust tests.
 
+### Async tests
 
+One of the biggest challenges of testing web applications, whether they're Wasm or
+traditional JavaScript ones, is code that occurs asynchronously. 
 
+In the case of our code, that's anything that runs in an `async` block or function. 
+
+Imagine calling a function in an `async` test and then immediately trying to verify it worked. 
+By definition, you can't, because it's running asynchronously and may not have finished yet. 
+
+Fortunately, `wasm_bindgen_test` handles this rather easily by making the test's 
+functions async themselves.
+
+Let's look at a simpler example and try to write a test 
+for the `load_json` function in the `browser` module:
+
+```rust
+// src/browser.rs
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_bindgen_test::wasm_bindgen_test;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    async fn test_error_loading_json() {
+        let json = fetch_json("not_there.json").await;
+        assert_eq!(json.is_err(), true);
+    }
+}
+```
+This can be found in the browser module. 
+
+Here, we start with the boilerplate to set up a tests module, 
+bring into scope both `browser` and `wasm_bindgen_test`, 
+
+```
+    use super::*;
+    use wasm_bindgen_test::wasm_bindgen_test;
+```
+
+and configure the test to run in the browser. 
+
+```
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+```
+
+The test itself is only two lines.
+Try to load a JSON file that doesn't exist and report an error. 
+
+The key difference between this is that the test is `async`, 
+which allows us to use await in the test and write the assertion 
+without adding any "wait for" logic. 
+
+This is great, but there are a couple of things to keep in mind:
+
+• If fetch_json can hang, this test will hang.
+• This test will try to load a file. Ideally, we don't want to do this in a unit test.
+
+This test will run and pass. 
+We could test all of the browser functions this way, 
+accepting that the browser module's tests will use the filesystem as needed. 
+
+That's probably what I would do if I was handed this system in a professional environment. 
+
+You could work very hard to stub out the actual browser on these tests, 
+but to do so would remove its ability to prevent defects. 
+
+After all, if you remove the browser from the browser module, 
+then how do you know you got the code right?
+
+OUTPUT:
+
+```
+    Finished test [unoptimized + debuginfo] target(s) in 0.02s
+     Running unittests src/lib.rs (target/wasm32-unknown-unknown/debug/deps/walk_the_dog-ef9df5f7585ca5f5.wasm)
+Set timeout to 20 seconds...
+Running headless tests in Firefox on `http://127.0.0.1:34465/`
+Try find `webdriver.json` for configure browser's capabilities:
+Not found
+running 2 tests                                   
+
+test walk_the_dog::browser::tests::test_error_loading_json ... ok
+test walk_the_dog::game::tests::test_transition_from_game_over_to_new_game ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored
+     Running tests/app.rs (target/wasm32-unknown-unknown/debug/deps/app-f143509e4e2c9db9.wasm)
+Set timeout to 20 seconds...
+Running headless tests in Firefox on `http://127.0.0.1:45413/`
+Try find `webdriver.json` for configure browser's capabilities:
+Not found
+running 1 test                                    
+
+test app::web_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored
+```
 
 ---------
 
