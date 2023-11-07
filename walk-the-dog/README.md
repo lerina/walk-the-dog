@@ -284,16 +284,244 @@ I don't see how the game could work if that's failing.
 
 There is one more warning we've been ignoring that we should address, as shown here:
 
+```
+warning: method `draw_rect` is never used
+   --> src/engine.rs:127:12
+    |
+106 | impl Image {
+    | ---------- method in this implementation
+...
+127 |     pub fn draw_rect(&self, renderer: &Renderer) {
+    |            ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+```
+
+This warning is a little unique because we used this function for debugging. 
+You may not want to draw rectangles in your game, but it's essential for debugging collision boxes, 
+as we did in Chapter 5, Collision Detection, so we'll want it to be available. 
+
+To keep it around, let's annotate it with the allow keyword, as suggested like so:
+
+```rust
+// src/engine.rs
+
+impl Renderer {
+    ...
+    #[allow(dead_code)]
+    pub fn draw_rect(&self, bounding_box: &Rect) {
+
+...
+```
+
+There's one more tool we can use to see whether our code could be improved. 
+
+If you've spent much time in the Rust ecosystem, then you've probably heard of `Clippy`, 
+a popular Rust linter that will catch common Rust mistakes and improve your code, 
+above and beyond those found by the compiler's defaults. 
+
+It's installed as a Cargo component, so it's not added to your Cargo.toml file
+but to the current system itself. Installation is simple, and you may have done it at some
+point and forgotten about it, but if you haven't, it's one shell command:
+
+```
+$ rustup component add clippy
+```
+
+Once you've installed Clippy, you can run cargo clippy and see all the other ways we
+wrote bad Rust code.
+
+When I run `cargo clippy`, I get 17 warnings, but your number could be different,
+depending on when you run it. 
+
+Many of the other errors are about overusing clone and using into when it isn't
+necessary. I highly recommend going through the code and fixing those, taking another
+moment to understand why they were flagged. In Chapter 10, Continuous Deployment,
+we'll add Clippy to our build process so that we don't have to keep putting up with
+these errors.
+
+
+### Measuring performance with a browser
+
+The first step in debugging performance is answering the question, Do you have
+a performance problem? Too many developers, especially game developers, worry too
+early about performance and introduce complex code for a performance gain that just
+isn't there.
+
+For example, do you know why so much of this code uses i16 and f16 ?
+In General there is performance gains to convert 32-bit integers into 16-bit integers.
+
+It turns out, however, that WebAssembly doesn't support a 16-bit numeric value, so all of the
+optimization to i16 in our game was pointless. It's not harming anything and it's not worth going back
+to change it, but it reinforces the first rule of optimization: measure first. With that in
+mind, let's investigate two different ways to measure the performance of our game.
+
+
+
+#### Frame rate counter
+
+There are two ways our game can perform poorly: by using too much memory and
+slowing the frame rate. The second of those is far more important, especially for a
+small game like this, so we'll want to start looking at frame rate first. If the frame rate
+consistently lags, our game loop will account for it as best it can, but the game will look
+jittery and respond poorly. So, we need to know the current frame rate, and the best way
+to do that is to draw it on the screen.
+
+We'll start by adding a function, `draw_text`, that will draw arbitrary text on the screen.
+This is debug text, so similarly to the `draw_rect` function, we'll need to disable the
+warning that says the code is unused. Writing text is a function of `Renderer` in the
+`engine` module, as shown here:
+
+
+```rust
+// src/engine.rs
+
+impl Renderer {
+    ...
+    #[allow(dead_code)]
+    pub fn draw_text(&self, text: &str, location: &Point) -> Result<()> {
+        self.context.set_font("16pt serif");
+        self.context
+            .fill_text(text, location.x.into(), location.y.into())
+            .map_err(|err| anyhow!("Error filling text {:#?}", err))?;
+
+        Ok(())
+    }
+}
+
+```
+
+We've hardcoded the font here because this is for debugging purposes only, so it's not
+worth customizing. 
+
+Now, we need to add a frame rate calculator to the game loop, 
+which is in the `start` method of `GameLoop` in the `engine` module. 
+
+You can refresh your memory on how it works by reviewing Chapter 3, Creating a Game Loop. 
+
+The frame rate can be calculated by taking the difference between the last two frames, 
+dividing by 1,000, to get from milliseconds to seconds, 
+and calculating its inverse (which is 1 divided by the number). 
+
+This is simple but it will lead to the frame rate fluctuating wildly on screen
+and won't show very useful information. 
+What we can do instead is update the frame rate every second 
+so that we can get a fairly stable indicator of performance on screen.
+
+Let's add that code to the `engine` module. 
+
+We'll start with a standalone function that will calculate the frame rate every second 
+in the `start` method, as shown here:
+
+
+```rust
+// src/engine.rs
+
+unsafe fn draw_frame_rate(renderer: &Renderer, frame_time: f64)
+{
+    static mut FRAMES_COUNTED: i32 = 0;
+    static mut TOTAL_FRAME_TIME: f64 = 0.0;
+    static mut FRAME_RATE: i32 = 0;
+
+    FRAMES_COUNTED += 1;
+    TOTAL_FRAME_TIME += frame_time;
+
+    if TOTAL_FRAME_TIME > 1000.0 {
+        FRAME_RATE = FRAMES_COUNTED;
+        TOTAL_FRAME_TIME = 0.0;
+        FRAMES_COUNTED = 0;
+    }
+
+    if let Err(err) = renderer.draw_text(
+        &format!("Frame Rate {}", FRAME_RATE),
+        &Point { x: 400, y: 100 },
+    ) {
+        error!("Could not draw text {:#?}", err);
+      }
+}//^-- unsafe fn draw_frame_rate
+
+```
+
+
+Oh no – it's an unsafe function! It's the first one in this book, and probably the last.
+
+We're using an unsafe function here because of the static mut variables – that
+is, FRAMES_COUNTED , TOTAL_FRAME_TIME , and FRAME_RATE – which 
+are not safe  in a multithreaded environment. 
+
+We know that this function won't be called in a multithreaded way, 
+and we also know that if it was called, it would just show a weird frame rate value. 
+
+It's not something I generally recommend, but in this case, we don't want to pollute `GameLoop` 
+or the engine module with those values or put them in thread-safe types. 
+
+After all, we wouldn't want to have our frame rate calculator take too long because
+of a bunch of Mutex lock calls. 
+
+So, we'll accept that this debugging function is unsafe , shiver in fear for a moment, and move on.
+
+The function starts by setting up the initial `FRAMES_COUNTED`, `TOTAL_FRAME_TIME`,
+and `FRAME_RATE` values. 
+On each call to `draw_frame_rate`, we update `TOTAL_FRAME_TIME` and the number of `FRAMES_COUNTED`. 
+When `TOTAL_FRAME_TIME` has passed 1000, this means that 1 second has elapsed, 
+since `TOTAL_FRAME_TIME` is in milliseconds. We can set `FRAME_RATE` to the number of `FRAMES_COUNTED` 
+because that's the literal frames per second (FPS) and then reset both counters. 
+
+After calculating the frame count, we draw it with the new `draw_text` function we just created. 
+This function is going to be called last on every frame, which is important because if it isn't,
+we would draw the game right over the top of the frame rate. If we didn't draw the frame
+rate on every frame, we also wouldn't see it except for brief flickers on the screen, which is
+hardly suitable for debugging.
+
+Now, let's add the call to `GameLoop`, in the start function, as shown here:
 
 
 ---------
 
 
 ```rust
-// src/game.rs
+// src/engine.rs
 
 
+impl GameLoop {
+
+    //pub async fn start(mut game: impl Game + 'static) -> Result<()> {
+    pub async fn start(game: impl Game) -> Result<()> {
+        ...
+        *g.borrow_mut() = Some(browser::create_raf_closure(move |perf: f64| {
+            process_input(&mut keystate, &mut keyevent_receiver);
+
+            //game_loop.accumulated_delta += (perf - game_loop.last_frame) as f32;
+            let frame_time = perf - game_loop.last_frame;
+            game_loop.accumulated_delta += frame_time as f32;
+
+            while game_loop.accumulated_delta > FRAME_SIZE {
+                game.update(&keystate);
+                game_loop.accumulated_delta -= FRAME_SIZE;
+            }
+            game_loop.last_frame = perf;
+            //game.draw(&browser::context().expect("Context should exist",));
+            game.draw(&renderer);
+
+            if cfg!(debug_assertions) {
+                unsafe {
+                    draw_frame_rate(&renderer, frame_time);
+                }
+            }
+        ...
 
 ```
+The `game_loop.accumlated_delta` line has changed slightly, pulling the calculation
+for the length of the frame into a temporary variable, `frame_time`. 
+
+Then, after drawing, we check whether we are in `debug/development` mode through the check 
+for if `cfg!(debug_assertions)`. 
+This will ensure that this doesn't show up in the deployed code. 
+
+If we are in debug mode, we call `draw_frame_rate` inside an `unsafe` block. 
+We send that function `renderer` and `frame_time`, which we just pulled into a temporary
+variable. Adding this code gives us a clear measurement of the frame rate on the screen:
+
 
 

@@ -1091,7 +1091,7 @@ impl Game for WalkTheDog {
                 let background_music = audio.load_sound("../resources/sound/background_song.mp3").await?;
 
                 //play it immediately and drive people nuts                
-                audio.play_looping_sound(&background_music)?;
+                //audio.play_looping_sound(&background_music)?;
 
                 let rhb = RedHatBoy::new(sheet, 
                                          engine::load_image("../resources/pix/rhb.png").await?,
