@@ -7,14 +7,13 @@ use async_trait::async_trait;
 use futures::channel::{
     mpsc::{unbounded, UnboundedReceiver},
     oneshot::channel,};
-//use serde::Deserialize;
+use serde::Deserialize;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Mutex};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlImageElement, HtmlElement};
 use web_sys::{AudioContext, AudioBuffer,};
 
-//use gloo_utils::format::JsValueSerdeExt;
-use serde::{Serialize, Deserialize};
+//use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Copy, Default)]
 pub struct Point {
@@ -79,8 +78,8 @@ impl Rect {
     }
 }//^-- impl Rect
 
-//#[derive(Deserialize, Clone)]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
+//#[derive(Serialize, Deserialize, Clone)]
 pub struct SheetRect {
     pub x: i16,
     pub y: i16,
@@ -89,16 +88,16 @@ pub struct SheetRect {
 }
 
 
-//#[derive(Deserialize, Clone)]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
+//#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Cell {
     pub frame: SheetRect,
     pub sprite_source_size: SheetRect,
 }
 
-//#[derive(Deserialize, Clone)]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
+//#[derive(Serialize, Deserialize, Clone)]
 pub struct Sheet {
     pub frames: HashMap<String, Cell>,
 }

@@ -341,6 +341,138 @@ moment to understand why they were flagged. In Chapter 10, Continuous Deployment
 we'll add Clippy to our build process so that we don't have to keep putting up with
 these errors.
 
+#### Serializing and Deserializing Arbitrary Data Into and From JsValue with Serde
+
+One major warning is the use of `into_serde()`. JsValue::into_serde() is deprecated! 
+
+It's possible to pass arbitrary data from Rust to JavaScript by serializing it with Serde. 
+But now we do it through the `serde-wasm-bindgen` crate or `gloo_utils`.
+
+##### serde-wasm-bindgen
+
+You first have to add it as a dependency in your Cargo.toml. You also need the serde crate, with the derive feature enabled, to allow your types to be serialized and deserialized with Serde.
+
+```toml
+# Cargo.toml
+...
+
+[dependencies]
+...
+serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.4"
+...
+```
+
+Derive the Serialize and Deserialize Traits
+
+Add #[derive(Serialize, Deserialize)] to your type. All of your type's members must also be supported by Serde, i.e. their types must also implement the Serialize and Deserialize traits.
+
+We don't have to change engine.rs
+We only need `Deserialize` which we have already.
+
+```rust
+// src/engine.rs
+
+...
+//use serde::{Serialize, Deserialize};
+use serde::Deserialize;
+...
+
+//#[derive(Serialize, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
+pub struct SheetRect {
+    pub x: i16,
+    pub y: i16,
+    pub w: i16,
+    pub h: i16,
+}
+
+
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Cell {
+    pub frame: SheetRect,
+    pub sprite_source_size: SheetRect,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Sheet {
+    pub frames: HashMap<String, Cell>,
+}
+
+
+```
+
+Send it to JavaScript with `serde_wasm_bindgen::to_value`.  
+Receive it from JavaScript with `serde_wasm_bindgen::from_value`.
+
+```rust
+// src/game.rs
+
+...
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    async fn initialize(&self) -> Result<Box<dyn Game>> {
+        match self.machine {
+            None => {         
+                
+                //let sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;    
+                //    
+                let sheet = serde_wasm_bindgen::from_value(
+                                browser::fetch_json("../resources/pix/rhb.json").await?).unwrap();
+                ...
+                let sprite_sheet = Rc::new(
+                                    SpriteSheet::new(
+                                        //tiles.into_serde::<Sheet>()?,
+                                        serde_wasm_bindgen::from_value(tiles).unwrap(),
+                                        engine::load_image("../resources/pix/tiles.png").await?,
+                                   ));
+
+
+```
+
+##### gloo_utils
+
+This is a drop in replacement. We only need to modify Cargo.toml
+and only bring into scope `JsValueSerdeExt` 
+with `use gloo_utils::format::JsValueSerdeExt;`
+if we need a `JsValue::from_serde`
+
+```toml
+[dependencies]
+...
+gloo-utils = { version = "0.2", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+...
+
+```
+
+Our code just stays the same as if we used `JsValue::into_serde()`.
+
+```rust
+// src/game.rs
+
+...
+use gloo_utils::format::JsValueSerdeExt;
+...
+#[async_trait(?Send)]
+impl Game for WalkTheDog {
+    async fn initialize(&self) -> Result<Box<dyn Game>> {
+        match self.machine {
+            None => {         
+                
+                let sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;    
+                ...
+                let sprite_sheet = Rc::new(
+                                    SpriteSheet::new(
+                                        tiles.into_serde::<Sheet>()?,
+                                        //serde_wasm_bindgen::from_value(tiles).unwrap(),
+                                        engine::load_image("../resources/pix/tiles.png").await?,
+                                   ));
+
+
+```
+
 
 ### Measuring performance with a browser
 
