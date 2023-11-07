@@ -7,11 +7,14 @@ use async_trait::async_trait;
 use futures::channel::{
     mpsc::{unbounded, UnboundedReceiver},
     oneshot::channel,};
-use serde::Deserialize;
+//use serde::Deserialize;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Mutex};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlImageElement, HtmlElement};
 use web_sys::{AudioContext, AudioBuffer,};
+
+//use gloo_utils::format::JsValueSerdeExt;
+use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Copy, Default)]
 pub struct Point {
@@ -76,7 +79,8 @@ impl Rect {
     }
 }//^-- impl Rect
 
-#[derive(Deserialize, Clone)]
+//#[derive(Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SheetRect {
     pub x: i16,
     pub y: i16,
@@ -85,14 +89,16 @@ pub struct SheetRect {
 }
 
 
-#[derive(Deserialize, Clone)]
+//#[derive(Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Cell {
     pub frame: SheetRect,
     pub sprite_source_size: SheetRect,
 }
 
-#[derive(Deserialize, Clone)]
+//#[derive(Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Sheet {
     pub frames: HashMap<String, Cell>,
 }
@@ -233,13 +239,13 @@ pub async fn load_image(source: &str) -> Result<HtmlImageElement> {
 
     let success_callback = browser::closure_once(move || {
         if let Some(success_tx) = success_tx.lock().ok().and_then(|mut opt| opt.take()) {
-            success_tx.send(Ok(()));
+            let _ = success_tx.send(Ok(()));
         }
     });
 
     let error_callback: Closure<dyn FnMut(JsValue)> = browser::closure_once(move |err| {
         if let Some(error_tx) = error_tx.lock().ok().and_then(|mut opt| opt.take()) {
-            error_tx.send(Err(anyhow!("Error Loading Image:{:#?}", err)));
+            let _ = error_tx.send(Err(anyhow!("Error Loading Image:{:#?}", err)));
         }
     });
 
@@ -333,13 +339,12 @@ impl GameLoop {
             //game.draw(&browser::context().expect("Context should exist",));
             game.draw(&renderer);
 
-
             if cfg!(debug_assertions) {
                 unsafe {
                     draw_frame_rate(&renderer, frame_time);
                 }
             }
-            browser::request_animation_frame(f.borrow().as_ref().unwrap());
+            let _ = browser::request_animation_frame(f.borrow().as_ref().unwrap());
         }));
 
         browser::request_animation_frame(
@@ -395,13 +400,13 @@ fn prepare_input() -> Result<UnboundedReceiver<KeyPress>> {
 
     let onkeydown = browser::closure_wrap(
                         Box::new(move |keycode: web_sys::KeyboardEvent| {
-                            keydown_sender.borrow_mut()
+                            let _ = keydown_sender.borrow_mut()
                                           .start_send(KeyPress::KeyDown(keycode));
                         }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
 
     let onkeyup = browser::closure_wrap(
                         Box::new(move |keycode: web_sys::KeyboardEvent| {
-                            keyup_sender.borrow_mut()
+                            let _ = keyup_sender.borrow_mut()
                                         .start_send(KeyPress::KeyUp(keycode));
                         }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
 
@@ -458,7 +463,7 @@ impl Audio {
         //sound::play_sound(&self.context, &sound.buffer)
         sound::play_sound(&self.context, &sound.buffer, sound::LOOPING::NO)
     }  
-
+    #[allow(dead_code)]
     pub fn play_looping_sound(&self, sound: &Sound) -> Result<()> {
         sound::play_sound(&self.context, &sound.buffer, sound::LOOPING::YES)
     }
@@ -472,7 +477,7 @@ pub fn add_click_handler(elem: HtmlElement) -> UnboundedReceiver<()> {
     let (mut click_sender, click_receiver) = unbounded();
     
     let on_click = browser::closure_wrap(Box::new(move || {
-                        click_sender.start_send(());
+                        let _ = click_sender.start_send(());
                    }) as Box<dyn FnMut()>);
 
     elem.set_onclick(Some(on_click.as_ref().unchecked_ref()));

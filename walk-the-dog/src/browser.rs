@@ -9,6 +9,7 @@ use web_sys::{
 use js_sys::ArrayBuffer;
 
 
+
 // It's a macro that allows you to log in to the console with log!
 // using a syntax such as the format! function.
 // Taken from https://rustwasm.github.io/book/game-of-life/debugging.html
