@@ -3,11 +3,19 @@
 ## pre-req a web server
 # cargo install http
 
-DEBUG=$1
 CMD=""
+FLAG="_"
+FLAG=$1
+DEBUG="build --debug --target web --out-dir www/pkg"
+TEST="test --headless --firefox"
+RUN="build --target web --out-dir www/pkg"
 
-if [ $DEBUG = "-d" ]; then
-    CMD=" --debug "
+if [ $FLAG = "-d" ]; then
+    CMD=$DEBUG
+elif [ $FLAG = "-t" ]; then
+    CMD=$TEST
+else
+    CMD=$RUN
 fi
 
 ## exit on error and  prints each executed command
@@ -17,9 +25,10 @@ set -ex
 rm -fr www/pkg
 
 ## compile for plain vanilla no javascript framework 
-wasm-pack build $CMD --target web --out-dir www/pkg  
+wasm-pack $CMD
+
 #--color=always 2>&1 | less -R
-echo $CMD
+#echo $CMD
 ## display link for easy access
 echo "Serving at: http://127.0.0.1:8080/html/"
 

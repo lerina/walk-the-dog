@@ -433,10 +433,10 @@ impl Game for WalkTheDog {
 
 ##### gloo_utils
 
-This is a drop in replacement. We only need to modify Cargo.toml
-and only bring into scope `JsValueSerdeExt` 
-with `use gloo_utils::format::JsValueSerdeExt;`
-if we need a `JsValue::from_serde`
+Here `wasm_bindgen::JsValue::from_serde` and `wasm_bindgen::JsValue::into_serde` 
+are replaced with `gloo_utils::format::JsValueSerdeExt::from_serde` and `gloo_utils::format::JsValueSerdeExt::into_serde` respectively.
+
+We need to modify Cargo.toml
 
 ```toml
 [dependencies]
@@ -447,7 +447,8 @@ serde = { version = "1.0", features = ["derive"] }
 
 ```
 
-Our code just stays the same as if we used `JsValue::into_serde()`.
+and bring into scope `JsValueSerdeExt` 
+with `use gloo_utils::format::JsValueSerdeExt;`
 
 ```rust
 // src/game.rs
@@ -460,19 +461,33 @@ impl Game for WalkTheDog {
     async fn initialize(&self) -> Result<Box<dyn Game>> {
         match self.machine {
             None => {         
-                
-                let sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;    
+                //gloo_utils  version              
+                let sheet = JsValueSerdeExt::into_serde(
+                                &browser::fetch_json("../resources/pix/rhb.json").await?
+                            )?;
+
                 ...
                 let sprite_sheet = Rc::new(
                                     SpriteSheet::new(
-                                        tiles.into_serde::<Sheet>()?,
-                                        //serde_wasm_bindgen::from_value(tiles).unwrap(),
+                                        //gloo_utils  version        
+                                        JsValueSerdeExt::into_serde(&tiles)?,
                                         engine::load_image("../resources/pix/tiles.png").await?,
                                    ));
 
 
 ```
 
+####  Ch0osing one or the other
+
+`serde-wasm-bindgen` is slower but allows to export things that can't be `json_ed`.
+`gloo_utils::format::JsValueSerdeExt` is faster but also results in bigger files.
+
+"
+serde-wasm-bindgen works by directly manipulating JavaScript values. This requires a lot of calls back and forth between Rust and JavaScript, which can sometimes be slow. An alternative way of doing this is to serialize values to JSON, and then parse them on the other end. Browsers' JSON implementations are usually quite fast, and so this approach can outstrip serde-wasm-bindgen's performance in some cases. But this approach supports only types that can be serialized as JSON, leaving out some important types that serde-wasm-bindgen supports such as Map, Set, and array buffers.
+
+That's not to say that using JSON is always faster, though - the JSON approach can be anywhere from 2x to 0.2x the speed of serde-wasm-bindgen, depending on the JS runtime and the values being passed. It also leads to larger code size than serde-wasm-bindgen. So, make sure to profile each for your own use cases.
+"
+[source](https://rustwasm.github.io/wasm-bindgen/reference/arbitrary-data-with-serde.html)
 
 ### Measuring performance with a browser
 
@@ -579,7 +594,7 @@ unsafe fn draw_frame_rate(renderer: &Renderer, frame_time: f64)
 Oh no – it's an unsafe function! It's the first one in this book, and probably the last.
 
 We're using an unsafe function here because of the static mut variables – that
-is, FRAMES_COUNTED , TOTAL_FRAME_TIME , and FRAME_RATE – which 
+is, `FRAMES_COUNTED`, `TOTAL_FRAME_TIME`, and `FRAME_RATE` – which 
 are not safe  in a multithreaded environment. 
 
 We know that this function won't be called in a multithreaded way, 
@@ -607,9 +622,6 @@ rate on every frame, we also wouldn't see it except for brief flickers on the sc
 hardly suitable for debugging.
 
 Now, let's add the call to `GameLoop`, in the start function, as shown here:
-
-
----------
 
 
 ```rust
@@ -651,9 +663,147 @@ Then, after drawing, we check whether we are in `debug/development` mode through
 for if `cfg!(debug_assertions)`. 
 This will ensure that this doesn't show up in the deployed code. 
 
+#### Using debug mode with wasm-pack
+
+```
+$ wasm-pack build --debug --target web --out-dir www/pkg
+```
+
 If we are in debug mode, we call `draw_frame_rate` inside an `unsafe` block. 
 We send that function `renderer` and `frame_time`, which we just pulled into a temporary
 variable. Adding this code gives us a clear measurement of the frame rate on the screen:
+
+![Frame Rate](./readme_pix/frame_rate.png)
+
+#### Framerate drop
+
+We can simulate bad performance by commenting our preloading in the html file
+
+```html
+<!-- www/html/index.html -->
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Wasm no NPM no Webpack</title>
+  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="icon" href="../favicon_96x96.png">
+<!--
+  <link rel="preload" as="image" href="../resources/pix/Button.svg">
+  <link rel="preload" as="font"  href="../resources/fonts/kenney_future_narrow-webfont.woff2">
+-->
+</head>
+<body>
+...
+
+```
+
+
+Displaying the frame rate is a great way to make sure that you, as a developer, 
+see performance issues right away. 
+If the frame rate dips, then you've got a problem, just like we have when we
+don't preload the assets. 
+Sometimes, we need more than just a frame rate counter. 
+
+So, let's leave the preload code deleted and see the performance problem in the browser debugger.
+
+### Browser debugger
+
+Every modern browser has developer tools, but I'll be using Chrome for this section.
+In general, they all look similar to each other.
+
+To get performance information, I must start the game and open the developer tools in the browser. 
+
+Then, I must right-click and click Inspect, though there are plenty of other ways
+to open the tools. From there, I must click the Performance tab and start recording. 
+Then, I must run `RHB` into a rock and stop recording. 
+Since I know I've got a specific spot with a performance dip, 
+I want to get to it as quickly as possible to hide any noise in the
+debugger from other code. After I do that, I will see a graph, like this:
+
+![The Performance tab](./readme_pix/performance_tab.png)
+
+That's a lot of noise, but you can see that the graph changes. There's a pink blob on the
+Frames row, which shows that something happened there. I can select the section
+that looks like a hill with my cursor and drag it to zoom in on it. Now, I will see the
+following screen:
+
+![Dropped frames](./readme_pix/dropped_frames.png)
+
+
+Here, you can see that one frame was 115.8 ms. I opened the Frames section (see how
+the gray arrow next to Frames points down) to see what was drawn on those frames –
+our poor knocked-out RHB. A frame that's 115.8 ms is way too long, and if you hover
+your mouse over that, it will show you dropped frames. Beneath the Frames section,
+there's the Main section, which shows what the application was doing. I've highlighted
+Recalculate Style here, which is taking 33.55 ms according to the ToolTip window, which
+shows up after I roll my mouse over it.
+
+Recalculate Style is something the browser has to do when you add things to the DOM,
+such as a button. How did we write our UI again? We added buttons to the UI. By
+inserting the button into the document, we force the styles to be recalculated and redo the
+layout; since we didn't preload the elements, it's slower than one of our frames in a game.
+To speed this up, we can restore the three preloaded lines we deleted from the index.
+html file, which should speed up recalculating the layout. If you do that and remeasure
+your performance, you'll see something like this:
+
+![No dropped frames](./readme_pix/no_dropped_frames.png)
+
+Was this worth worrying about? Possibly – it is noticeable to see the button load, but it's
+not worth extending this chapter to fix it. You know how to fix it, and you know how to
+find the issue in the Performance tab, and that's what's important for now. Anyway, we
+have another question to answer: how much memory is this game taking up?
+
+#### Checking memory
+
+When I was writing this game, I would frequently leave it running all day in the
+background, only to have my browser become very unresponsive as it started taking up all
+my computer's memory. I began to suspect that the game had a memory leak, so I started
+investigating. You may think it's impossible to have a memory leak in Rust due to its
+guarantees, and it is harder, but remember that a lot of our code talks to JavaScript, where
+we don't necessarily have the same guarantees. Fortunately, we can check this with the
+same tools we have been using to test performance.
+
+Go ahead and clear the performance data by clicking no sign in the top-left corner. Then,
+start another recording and play for a little while. This time, don't try to die right away; go
+ahead and let the game play for a bit. Then, stop recording and look at the performance
+data again, this time ensuring you click the Memory button. Now, you can a look at the
+results, which may look like this:
+
+![Memory profiling](./readme_pix/memory_profiling.png)
+
+Can you see that blue wave at the bottom of the screen, which shows HEAP in the bottom
+right-hand corner? This shows that our memory grows and then is periodically reclaimed.
+
+This may not be ideal as we'd like memory to be constant, but we aren't trying to
+control things to that degree at this time. Chrome, and most browsers, run their garbage
+collectors in separate threads so that they won't affect performance as much as you may
+think. 
+It would be worth experimenting and creating a memory budget in the application
+and keeping all the allocations in that budget, but that's outside the scope of this book.
+
+Fortunately, the memory is reclaimed and it doesn't look like the game is growing
+uncontrollably.
+
+After further investigation, it turned out that the problem with my browser was caused
+by my company's bug tracker, which uses far more memory than this little game! If you're
+seeing performance issues, make sure you account for other tabs, browser extensions, and
+anything else that might be slowing down your computer outside of the game.
+
+
+
+---------
+
+
+```rust
+// src/engine.rs
+
+
+
+```
+
+
 
 
 

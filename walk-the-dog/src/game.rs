@@ -6,7 +6,8 @@ use rand::prelude::{thread_rng, Rng};
 use futures::channel::mpsc::UnboundedReceiver;
 
 use self::red_hat_boy_states::*;
-//use gloo_utils::format::JsValueSerdeExt;
+
+use gloo_utils::format::JsValueSerdeExt;
 
 /*
 #[cfg(test)]
@@ -1086,11 +1087,14 @@ impl Game for WalkTheDog {
         match self.machine {
             None => {         
                 
-                let sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;    
-                //    
+                //serde
+                //let sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde()?;    
+                
+                //serde_wasm_bindgen    
                 //let sheet = serde_wasm_bindgen::from_value(
                 //                browser::fetch_json("../resources/pix/rhb.json").await?).unwrap();
-                //let sheet = browser::fetch_json("../resources/pix/rhb.json").await?.into_serde().unwrap();
+                //gloo_utils                
+                let sheet = JsValueSerdeExt::into_serde(&browser::fetch_json("../resources/pix/rhb.json").await?)?;
                 
                 let audio = Audio::new()?;
                 let sound = audio.load_sound("../resources/sound/SFX_Jump_23.mp3").await?;
@@ -1109,8 +1113,9 @@ impl Game for WalkTheDog {
                 let tiles = browser::fetch_json("../resources/pix/tiles.json").await?;
                 let sprite_sheet = Rc::new(
                                     SpriteSheet::new(
-                                        tiles.into_serde::<Sheet>()?,
-                                        //serde_wasm_bindgen::from_value(tiles).unwrap(),
+                                        //tiles.into_serde::<Sheet>()?,
+                                        //serde_wasm_bindgen::from_value(tiles)?,
+                                        JsValueSerdeExt::into_serde(&tiles)?,
                                         engine::load_image("../resources/pix/tiles.png").await?,
                                    ));
 
