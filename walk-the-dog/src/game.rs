@@ -108,7 +108,7 @@ impl Platform {
     fn bounding_boxes(&self) -> &Vec<Rect> {
         &self.bounding_boxes
     }
-
+    #[allow(dead_code)]
     fn draw_rect(&self, renderer: &Renderer){
         for bounding_box in self.bounding_boxes() {
             renderer.draw_rect(&bounding_box);
@@ -257,7 +257,7 @@ impl RedHatBoy {
         }
     }
 
-
+    #[allow(dead_code)]
     fn draw_rect(&self, renderer: &Renderer){
         renderer.draw_rect(&self.bounding_box());
     }
@@ -840,6 +840,8 @@ impl WalkTheDogStateMachine {
         WalkTheDogStateMachine::Ready(WalkTheDogState::new(walk))
     }
     fn update(self, keystate: &KeyState) -> Self {
+        //log!("Keystate is {:#?}", keystate);
+    
         match self {
             WalkTheDogStateMachine::Ready(state) => state.update(keystate).into(),
             WalkTheDogStateMachine::Walking(state) => state.update(keystate).into(),
@@ -1027,7 +1029,10 @@ impl WalkTheDogState<GameOver> {
     }
 
     fn new_game(self) -> WalkTheDogState<Ready> {
-        browser::hide_ui();
+        //browser::hide_ui();
+        if let Err(err) = browser::hide_ui() {
+            error!("Error hiding the browser {:#?}", err);
+        }
 
         WalkTheDogState {
             _state: Ready,

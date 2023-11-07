@@ -1,311 +1,249 @@
 # Testing and Advanced Tricks
 
-## Testing, Debugging, and Performance
+## Debugging the game
 
-Developing a game can be a long process, especially if you're a hobbyist. When you only
-have 4 hours to work on it in a given week, they can't all be spent fighting the same bug.
-To ensure our game works, we need to test it, find mistakes, and make sure it's not too
-slow. That's what we're going to be doing here.
+### Debugger
 
-In this chapter, we will cover the following topics:
+To debug a traditional program, be it in Java, C#, or C++, we must set breakpoints and
+step through the code. In JavaScript, we can type the word debugger to set a breakpoint,
+but although WebAssembly runs in the browser, it isn't JavaScript. 
 
-• Creating automated tests
-• Debugging the game
-• Measuring performance with the browser
+So, how do we debug it?
 
-After completing this chapter, you'll be able to fix the bugs we've written so far and make
-sure they don't happen again.
+There's a lot of conflicting information about debugging with WebAssembly. 
+How do you debug WebAssembly? 
 
-### Creating automated tests
-
-Some ways to test your game is working correctly involve doing the following:
-
-• Using types to prevent programmer errors
-• Playing the game yourself
-• Performing automated unit tests
-• Performing automated integration tests
-
-Almost any application can benefit from automated, programmer-written unit tests and as
-a program becomes even larger, it begins to benefit from integration tests as well. There's
-not a consistent definition of the differences between these two types of tests as you tend
-to know them when you see them, but fortunately, we can use the Rust definitions.
-
-Rust and Cargo provide two kinds of testing:
-
-• Unit tests via cargo test
-• Integration tests via `wasm-pack` test
-
-**Unit tests** tend to be programmer-centric.  
-They are written at the method or function level, with minimal dependencies.   
-You may have a test for every branch of an if/else statement,  
-while in the case of a loop, you may have tests for when a list has 0, 1, or many entries.  
-These tests are small and fast and should run in seconds or less.  
-These are my preferred form of testing.
-
-**Integration tests** tend to look at the app at a higher level. In the case of our code, the
-integration tests automate the browser and will work based on an event (such as a mouse
-click) throughout the program. These tests take longer to write, are harder to maintain,
-and often fail for mysterious reasons. So, why write them? Unit tests typically do not
-test parts of your application or they may only do so in small doses. This can lead to
-a situation where your unit tests all pass but the game doesn't work. Most systems will
-have fewer integration tests than unit tests because of their disadvantages, but they will
-need them for their benefits.
+Well, according to the official Rust WebAssembly documentation, it's simple – you can't!
 
 
-In Rust, unit tests are written side by side with a module and run with cargo test . In
-our setup, they will run as part of a Rust executable, running directly on the machine.
+Unfortunately, the debugging story for WebAssembly is still immature.
+On most Unix systems, DWARF is used to encode the information that a
+debugger needs to provide source-level inspection of a running program.
+There is an alternative format that encodes similar information on
+Windows. Currently, there is no equivalent for WebAssembly. Therefore,
+debuggers currently provide limited utility, and we end up stepping through
+raw WebAssembly instructions emitted by the compiler, rather than the
+Rust source text we authored.
 
-Integration tests are stored in the tests directory and only have access to things your
-crate makes public. They run in the browser – potentially a headless one – with `wasm-pack` test. 
-Unit tests can test internal methods directly, while integration tests must use your crate 
-as a real program would.
+[SOURCE](https://rustwasm.github.io/docs/book/reference/debugging.html)
 
-### Test-driven development
+So, there you have it – no debugging, section over. That was easy.
+Debbugers don't work yet. 
 
-I have a confession to make. I usually write all my code in a test-driven style, where you
-write a test then make it fail for each step in the development process. Had we followed
-that process during the development of this book, we'd likely have quite a few tests –
-perhaps more than 100. In addition, test-driven development (TDD) exerts a lot of
-pressure on the design that tends to lead to more loosely coupled code. So, why didn't we
-do this?
+But it's not that simple.
+Debuggers are still useful for inspecting the JavaScript that interacts with our WebAssembly, and inspecting raw wasm state.
 
-Well, TDD has its downsides, with perhaps the largest being we'd generate a lot more code
-in the form of tests. We've already written a lot of code in this book, so imagine trying to
-follow along with the tests too – you can see why I felt it was best to leave out the kind of
-testing I normally write. 
 
-Test-Driven Rust isn't the title of this book after all. 
-However, just because we didn't write tests first doesn't mean we don't want to be sure our code works.
-That's why, in many cases, we used the type system as the first line of defense against
-mistakes, such as using the typestate pattern for state transitions. 
+And of course, you can debug your application – you just can't use your browser's developer tools 
+to step through the Rust code in a debugger. 
 
-The type system is one of the advantages of using Rust instead of JavaScript for this game.
+The technology isn't there yet. But that doesn't mean we don't debug; 
+it just means we'll take more of an old-school approach to debugging.
 
-This isn't to say that automated testing cannot provide value for our program. The Rust
-ecosystem places a high value on testing, so much so that a testing framework is built
-into Cargo and is automatically set up for any Rust program. 
 
-With unit tests, we can test algorithms such as collision detection or our famous state machines. 
-We can make sure that the game still does what we expect, although we can't test whether a game 
-is fun or pretty. 
+Earlier, I mentioned that when I write code, I typically write a lot of tests. I also typically
+don't use a debugger very often. If we break our code into smaller chunks that can be
+easily exercised by tests, a debugger is rarely required. 
 
-For that, you'll have to play the game until you hate it, but a game is a lot more fun 
-if the basics work. We can use tests, along with types, to ensure the code works as
-expected so that we can turn our focus to whether or not it's fun. 
+That said, we didn't do that for this project, so we'll need a way to debug existing code. 
 
-To do that, we'll need to set up the `test runner` and then write some tests 
-that run outside of the browser and inside the browser.
+We'll start by logging, then getting stack traces, 
+and finally using linters to prevent bugs before they happen.
 
-#### Getting started
+Note::
 
-As we mentioned earlier, Rust has built-in capabilities for running tests – both unit
-and integration. Unfortunately, the template we used way back in Chapter 1, Hello WebAssembly, 
-still has an out-of-date setup at the time of writing. If it hasn't been fixed,
-running cargo test at the command prompt will fail to compile, let alone run the tests.
+    The reality is not as cut and dry as the Rust Wasm site would state. Chrome
+    developer tools have added support for the DWARF debugging format to the
+    browser, as detailed here: https://developer.chrome.com/blog/
+    wasm-debugging-2020/ . This standard format, whose specification can
+    be found at https://dwarfstd.org/ , unfortunately is not supported
+    by wasm-bindgen at the time of writing. You can see progress on this
+    issue here: https://github.com/rustwasm/wasm-bindgen/
+    issues/2389 . By the time you read this book, the debugging tools may
+    be modernized in Rust Wasm, as well as in browsers outside of Chrome, but
+    for the time being, we must use more traditional tools such as println!
+    and logging.
+    
 
-Fortunately, there are not a lot of mistakes. There's just some out-of-date async code for
-a browser test we won't be using in the automatically generated tests. Those tests are in the
-tests directory in the app.rs file. 
+### Log versus error versus panic
 
-This is traditionally where integration tests are put in Cargo projects. 
-We'll change that setup shortly by using unit tests, but first, 
-let's get this to compile by deleting the incorrect `async_test` setup test. 
+If you've been following along and got confused at some point, then you've probably used
+the `log!` macro we wrote in Chapter 3, Creating a Game Loop, to see what was going on.
 
-In `app.rs`, you can delete that function and the `#[wasm_bindgen_test(async)]` macro above it 
-so that your `app.rs` file looks like this:
+If you have been doing that, congratulations! You've been debugging the same way I did
+when I wrote the code originally. 
+
+**Print line** debugging is still standard in many languages and it's pretty much 
+the only form of debugging that's guaranteed to work anywhere. 
+
+If you haven't done that, then it looks like this:
 
 
 ```rust
-// tests/app.rs
+// src/game.rs
 
-use futures::prelude::*;
-use wasm_bindgen::JsValue;
-use wasm_bindgen_futures::JsFuture;
-use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
+impl WalkTheDogStateMachine {
 
-wasm_bindgen_test_configure!(run_in_browser);
+    fn update(self, keystate: &KeyState) -> Self {
+        log!("Keystate is {:#?}", keystate);
 
-// This runs a unit test in native Rust, so it can only use Rust APIs.
-#[test]
-fn rust_test() {
-    assert_eq!(1, 1);
-}
-
-// This runs a unit test in the browser, so it can use browser APIs.
-#[wasm_bindgen_test]
-fn web_test() {
-    assert_eq!(1, 1);
-}
+        match self {
+            WalkTheDogStateMachine::Ready(state) => state.update(keystate),
+            WalkTheDogStateMachine::Walking(state) => state.update(keystate),
+            WalkTheDogStateMachine::GameOver(state) => state.update(),
+        }
+    }
 
 ```
 
-Note
-After this book has been published, the template will be fixed and will likely
-compile. I'm going to assume this, regardless of you changing the code, so that
-it matches what is here going forward.
+In the preceding example, we are logging `KeyState` on every tick through the `update` function. 
+This isn't a great log because it's going to show an empty KeyState 60 times a second, 
+but it's good enough for our purposes. 
 
-Some of the use declarations aren't needed anymore, but they will be short so you can
-leave them in and ignore the warnings. 
+However, there's one flaw in this log: `KeyState` doesn't implement the Debug trait. 
+You can add it by adding the `derive(Debug)` annotation to the `KeyState` struct, like so:
 
-Now, `app.rs` contains two tests – one that will run in a JavaScript environment, such as the browser, 
-and one that will run as a native Rust test. 
-Both of these are just examples, where 1 is still equal to 1. 
-
-To run the native Rust tests, you can run `cargo test`, as you might be accustomed to. 
-That will run the `rust_test` function, which is annotated with the `test macro`. 
-
-You can run the browser-based tests, which are annotated with the `wasm_bindgen_test macro`, 
-via the `wasm-pack test --headless` `--chrome` or `--firefox` command. 
-This will run the web tests using the Chrome or firefox browser, in a headless environment. 
-You can also use `--safari`, and `--node` if you wish, but you must specify 
-what JavaScript environment you'll be running them in. 
-
-Note that `--node` isn't going to work since it doesn't have a browser.
-
-We'll start writing tests using the `#[test] macro`, which runs Rust code in the native environment, 
-just like writing a standard Rust program. 
-The simplest thing to test is a pure function, so let's try that.
-
-#### Pure functions
-
-Pure functions are functions that, given the same input, will always produce the same
-output, without side effects such as drawing to the screen or accessing the network. 
-
-They are analogous to mathematical functions, which just do a calculation, and are by far the
-easiest types of code to unit test. 
-
-These tests do not require the browser, so they use the
-`#[test] ` annotation and run with `cargo test`.
-
-
-The current setup runs our only Rust test in the `tests/app.rs` file, which makes it,
-as far as Cargo is concerned, an *integration test*. 
-I don't like that and prefer to use the Rust convention of writing *unit tests* in the file where the code 
-is executed. 
-
-In this first example, we'll test the intersects function on `Rect`, 
-which is a pure function that is complicated enough to mess up. 
-
-We'll add this test to the bottom of `engine.rs` because that's where `Rect` is defined, 
-and we'll run it with `cargo test`. 
-
-Let's add a test to the bottom of the module for the intersect method on Rect, 
-as shown here:
 
 ```rust
 // src/engine.rs
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn two_rects_that_intersect_on_the_left() {
-        let rect1 = Rect {
-            position: Point { x: 10, y: 10 },
-            height: 100,
-            width: 100,
-        };
-        let rect2 = Rect {
-            position: Point { x: 0, y: 10 },
-            height: 100,
-            width: 100,
-        };
 
-        assert_eq!(rect2.intersects(&rect1), true);
+#[derive(Debug)]
+pub struct KeyState {
+    pressed_keys: HashMap<String, web_sys::KeyboardEvent>,
+}
+
+```
+
+
+When you add this, the console will log all your key state changes, 
+which will be useful if your keyboard input is broken:
+
+> In general, any pub struct should use `#[derive(Debug)]`, 
+
+but this isn't the default option since it could make compile times long on large projects. 
+When in doubt, go ahead and use #[derive(Debug)]` and log the information. 
+
+Now, maybe `log!` isn't noticeable enough for you, and you want the text to be bright, 
+obvious, and red. 
+
+For that, you'll need to use console.error in JavaScript and write a macro such as the log macro, 
+which we already have in the browser module. 
+
+
+```rust
+// src/browser.rs
+
+// It's a macro that allows you to log in to the console with log!
+// using a syntax such as the format! function.
+// Taken from https://rustwasm.github.io/book/game-of-life/debugging.html
+
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
     }
-}//^-- mod tests
-
+}
 ```
 
-Much of this is documented in the [Rust book at](https://doc.rust-lang.org/book/ch11-00-testing.html), 
-but a little review never hurts anyone. 
-We start by using the `#[cfg(test)]` attribute macro to tell `Cargo` not to compile 
-and run this code except when we're running tests. 
-Then, we create a tests module using the `mod` keyword to isolate our tests from the rest 
-of the code. After that, we bring into scope the `engine` code with use `super::*`. 
-Then, we write our test by writing a function, `two_rects_that_intersect_on_the_left`, which is
-annotated with the `#[test] macro` so that the test runner can pick it up. 
+This time the macro looks like this:
 
-The rest of this is a pretty standard test. 
+```rust
+// src/browser.rs
 
-It creates two rectangles, where the second overlaps the first, and
-then makes sure that the intersects function returns true . 
-You can run this test with `cargo test`, where you'll see the following output:
 
-```
-Finished test [unoptimized + debuginfo] target(s) in 1.05s
-     Running unittests src/lib.rs (target/debug/deps/walk_the_dog-91fd784866f8434c)
-
-running 1 test
-test engine::tests::two_rects_that_intersect_on_the_left ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-     Running tests/app.rs (target/debug/deps/app-8dbf6eb66a05e337)
-
-running 1 test
-test rust_test ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
+macro_rules! error {
+    ( $( $t:tt )* ) => {
+        web_sys::console::error_1(&format!( $( $t )* ).into());
+    }
+}
 ```
 
-You'll see two sets of results with ok. 1 passed;. 
-The first result references our new test, `two_rects_that_intersect_on_the_left`, which will pass. 
-Then, you will see `rust_test run`, which will also pass. 
-The `rust_test` test is in `tests\app.rs` and was created with the project skeleton. 
-It is run as an integration test because it is in the tests directory – this is the Cargo standard. 
+This is the same as the log macro but uses the `error` function on the console object instead og `log`.
+There are two advantages to the `error` function. 
+The first is that it's red, 
+while the other is that it also will show you the stack trace. 
 
-The difference between `unit tests` and `integration tests` is that the integration tests 
-are run as a separate crate and use the production code as a separate library. 
-
-This means they use the code in the same way a user of your crate would, but they cannot call internal 
-or private functions. It's easier to get complete coverage when you're running unit tests 
-with the caveat that they may be less realistic. 
-
-Our code is not meant to be used as a crate, so we won't be using many integration tests.
-
-Now that we've written our first unit test for our code, we can write a lot more tests for
-this intersects method, including when the following occurs:
-
-• When the rectangles overlap on the top or bottom
-• When the rectangles overlap on the right
-• When the rectangles don't overlap – that is, when the function returns false
-
-We should have a test for every branch in the intersects function. 
-
-We leave these tests as an exercise for you since repeating them would be redundant. 
-
-As our code base grows, it would be ideal if much of our code could easily be tested like this, 
-but unfortunately, for this game, a lot of it interacts with the browser, 
-so we will have two different ways to test that. 
-
-The first way is to replace the browser with a stub so that we don't need to run browser-based tests. 
-We'll do that in the next section.
-
-#### Hiding the Browser module
-
-Way back in Chapter 3, Creating a Game Loop, we **separated browser functions** into
-a `browser` module. 
-
-We can use this as a seam to inject test versions of the browser functions 
-that will run as native Rust code and allow us to write tests.
+Here's an example of error being called when
+the player is knocked out in Chrome:
 
 
-Note::
-    
-    The term seam comes from the book Working Effectively with Legacy Code, by
-    Michael Feathers ( https://amzn.to/3kas1Fa ). It's written in C++
-    and Java but is still the best book on legacy code you can find. 
-    A seam is a place where you can insert test behavior to replace real behavior, 
-    while an enabling point is a point in the code that allows that to happen.
-    
+![Error log](./readme_pix/error_log.png)
 
-A **seam** is somewhere we can alter the behavior of the program 
-without altering the code in that place. 
 
-Look at the following code from the game module:
+It's not the most readable stack trace in the world, but after seeing a few lines of
+the `console::error_1` function, you can see that this `log` was called from
+`WalkTheDogState<Walking>::end_game`. 
+This log is really for true errors, as opposed to just informational logging, 
+and this stack trace may not show up clearly in all browsers. 
+
+You'll also want to be cautious with leaving this log in the production code 
+as you may not want to expose this much information to a curious player. 
+
+We'll want to make sure it's not in the production deployment, 
+which we'll create in Chapter 10, Continuous Deployment.
+
+
+Finally, if you want to make sure the program stops when an error occurs, we'll want to go
+ahead and use the `panic!` macro. 
+
+Some errors are recoverable but many are not, 
+and we don't want our program to limp along in a broken state. 
+
+In Chapter 1, Hello WebAssembly, we included the `console-error-panic-hook` crate 
+so that if the program were to panic, we'd get a stack trace. 
+
+Let's replace calling `error!` with calling `panic!` and see the difference:
+
+![Panic log](./readme_pix/panic_log.png)
+
+
+Here, you can see it looks a little different, but the information is mostly the same. 
+There is one thing at the very top where it says `src/game.rs:829`, which tells you exactly where
+panic was called. 
+In general, you will probably prefer to use panic compared to error if you need to have the error 
+in your production code because that kind of error should be rare and fail fast. 
+
+The error function is more useful during debugging, so you'll end up removing those.
+
+There's another kind of error that we've been ignoring at times, and that's the warnings
+and errors that are given to you by the compiler and linter. 
+
+We can use the Rust ecosystem's tools to detect mistakes before we ever run the program. 
+Let's look into that now.
+
+### Linting and Clippy
+
+One of the features that makes the Rust compiler great is that it has a `linter` built into it,
+in addition to the warnings and errors it already provides. If you're unfamiliar, a linter
+is a static code analysis tool that typically finds style errors and, potentially, logic errors
+above and beyond what the compiler can find. The term comes from the lint you find on
+clothing, so you can think of using a linter like rubbing a lint brush on your code. 
+
+We've been getting some warnings from the compiler that we've been ignoring for a while now,
+most of which look like this:
+
+```
+warning: unused `Result` that must be used
+    --> src/game.rs:1032:9
+     |
+1032 |         browser::hide_ui();
+     |         ^^^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+help: use `let _ = ...` to ignore the resulting value
+     |
+1032 |         let _ = browser::hide_ui();
+     |         +++++++
+
+```
+These are all cases where an error could occur, but we probably don't want to crash if it
+does, so panicking or calling `unwrap` isn't an option. 
+Propagating the `Result` type is an option, but I don't think we want to prevent moving 
+from one state to another if there's a small browser issue. 
+
+So, instead, we'll use the error case to log here. 
+You can see it at https://bit.ly/3q1936N in the sample source code. 
+Let's modify the code so that we log any errors:
 
 ```rust
 // src/game.rs
@@ -313,604 +251,46 @@ Look at the following code from the game module:
 impl WalkTheDogState<GameOver> {
     ...
     fn new_game(self) -> WalkTheDogState<Ready> {
-        browser::hide_ui();
+        //browser::hide_ui();
+        if let Err(err) = browser::hide_ui() {
+            error!("Error hiding the browser {:#?}", err);
+        }
 
         WalkTheDogState {
-            _state: Ready,
-            walk: Walk::reset(self.walk),
-        }
-    }
-}
-
-```
-
-We'd like to test that **when** the game goes from the `GameOver` state to the `Ready` state,
-the **UI is hidden**. 
-
-We can do this with integration tests by checking whether the div property that contains the UI 
-is empty after this transition. 
-
-We may want to do this, but such tests are frequently a little harder to write and maintain. 
-This is especially true as the game grows. 
-
-Another approach, which we'll use here, is to replace the `browser module` 
-with a version of it that doesn't interact with the browser. 
-The **seam** is `hide_ui`, which is a behavior we can replace without actually changing the code, 
-while the **enabling point** is the `use` declaration, which is where we brought in the `browser` module.
-
-We can enable using a *test version of the browser module* with **conditional compilation**.
-
-In the same way that the `#[cfg(test)]` macro only includes the test module when
-compiling in test mode, we can import different versions of the `browser` module with
-`cfg` directives, as shown here:
-
-```rust
-// src/game.rs
-
-#[cfg(test)]
-mod test_browser;
-
-#[cfg(test)]
-use test_browser as browser;
-
-#[cfg(not(test))]
-use crate::browser;
-```
-
-The preceding code can be found at the top of the `game` module, where we were
-previously importing `crate::browser`. Here, we can use the `mod` keyword to bring
-the contents of the `test_browser module` in from the `src/test_browser.rs` file, 
-but only when we're running a test build. 
-Then, we can use `test_browser` as browser to make the functions available via `browser::` calls – again, 
-only in test builds – in the same way as we call the browser production code. 
-
-Finally, we can add the `#[cfg(not(test))]` annotation to use `crate::browser` to prevent the real
-browser code from being imported into the test.
-
-Now we have:
-
-```rust
-// src/game.rs
-
-...
-
-use self::red_hat_boy_states::*;
-
-#[cfg(test)]
-mod test_browser;
-
-#[cfg(test)]
-use test_browser as browser;
-
-#[cfg(not(test))]
-use crate::browser;
-
-use crate::{
-    //browser,
-    engine::{ self, Cell, Game, Image, KeyState, Point, Rect, 
-              Renderer, Sheet, SpriteSheet, Sound, Audio},
-    segments::{stone_and_platform, platform_and_stone,},
-};
-...
-```
-
-
-See [Mocking in Rust with conditional compilation](https://klau.si/blog/mocking-in-rust-with-conditional-compilation/)
-
-
-If you do this and run `cargo test`, you'll see a lot of errors, 
-such as cannot find function `fetch_json` in module `browser` , because even though we're
-importing a test module, we haven't filled it in with any code. 
-In this situation, it's a good idea to follow the compiler errors, 
-which will point out that there's no file yet in `src/test_browser.rs`. 
-It will also list the functions that are used in the `game` module but aren't defined 
-in our `test_browser.rs` file. 
-
-To get past this, you can create the `test_browser.rs` file and bring in the bare minimum 
-that's needed to get back to compiling, as shown here:
-
-```rust
-// src/test_browser.rs
-
-use anyhow::{anyhow, Result};
-use wasm_bindgen::JsValue;
-use web_sys::HtmlElement;
-
-pub fn draw_ui(html: &str) -> Result<()> {
-    Ok(())
-}
-
-pub fn hide_ui() -> Result<()> {
-    Ok(())
-}
-
-pub fn find_html_element_by_id(id: &str) -> Result<HtmlElement>
-{
-    Err(anyhow!("Not implemented yet!"))
-}
-
-pub async fn fetch_json(json_path: &str) -> Result<JsValue> {
-    Err(anyhow!("Not implemented yet!"))
-}
-
-```
-As you can see, only four functions are used in game that have been defined in browser,
-and we've filled in just enough to compile. 
-
-To use this for testing, we're going to need to place simulated implementations 
-with some sort of state they keep track of. 
-
-The other thing you may notice is that `JsValue` and `HtmlElement` are both being used 
-in this code since they won't work when you run Rust native tests. 
-
-They require a browser runtime, so to continue along this path, 
-we'll eventually need to make test versions of `HtmlElement` and `JsValue` 
-or create wrapper types for them, potentially in the `engine` module. 
-
-Let's leave those as is for now, though, and try to write our first test
-using the standard Rust testing framework. 
-
-We'll want to test the state machine change I mentioned previously by setting up the game 
-in the `GameOver` state and transitioning to the `Running` state, 
-then checking that the `UI` was hidden. 
-
-The beginning of that test looks as follows:
-
-```rust
-// src/game.rs
-...
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use futures::channel::mpsc::unbounded;
-    use std::collections::HashMap;
-    use web_sys::{AudioBuffer, AudioBufferOptions};
-
-    fn test_transition_from_game_over_to_new_game() {
-        let (_, receiver) = unbounded();
-        let image = HtmlImageElement::new().unwrap();
-        let audio = Audio::new().unwrap();
-                                                // TYPO in BOOK
-        let options = AudioBufferOptions::new(1, 30000.0); // 3000.0);
-        //let options = AudioBufferOptions::new(1, 44100.0);
-        let sound = Sound {
-            buffer: AudioBuffer::new(&options).unwrap(),
-        };
-        let rhb = RedHatBoy::new(
-            Sheet {
-                frames: HashMap::new(),
-            },
-            image.clone(),
-            audio,
-            sound,
-        );
-        let sprite_sheet = SpriteSheet::new(
-            Sheet {
-                frames: HashMap::new(),
-            },
-            image.clone(),
-        );
-        let walk = Walk {
-            boy: rhb,
-            backgrounds: [
-                Image::new(image.clone(), Point { x: 0, y: 0 }),
-                Image::new(image.clone(), Point { x: 0, y: 0 }),
-            ],
-            obstacles: vec![],
-            obstacle_sheet: Rc::new(sprite_sheet),
-            stone: image.clone(),
-            timeline: 0,
-        };
-        let state = WalkTheDogState {
-            _state: GameOver {
-                new_game_event: receiver,
-            },
-            walk: walk,
-        };
-    }//^-- fn test_transition_from_game_over_to_new_game
-}//-- mod tests 
-```
-
----
-
-NOTE:  
-There is a typo in the book that breaks the test.
-
-```
-test walk_the_dog::game::tests::test_transition_from_game_over_to_new_game ... FAIL
-
-failures:
-
----- walk_the_dog::game::tests::test_transition_from_game_over_to_new_game output ----
-error output:
-    panicked at src/game.rs:1119:48:
-    called `Result::unwrap()` on an `Err` value: 
-    JsValue(NotSupportedError: AudioBuffer constructor: Sample rate (3000) is out of range
-
-```
-
-the sample rate  should be:
-
-```
-let options = AudioBufferOptions::new(1, 30000.0); // 3000.0);
-```
-
----
-
-Oh boy – that's a lot of code to test a few lines of Rust, and it's not even a complete test yet.
-It's just setting up the game in the state that we need it to be in before we transition into
-a Ready state. 
-
-A lot is being revealed about our design, specifically that it's what I may call naïve'. 
-It's very hard to construct objects, and while the game, engine, and browser modules are separate, 
-they are still pretty tightly coupled. It works but it in a fashion that only solves the problem 
-in front of us. 
-
-That's completely acceptable – we had specific goals to build a small endless runner and we did it, 
-but this also means that if we wanted to start extending our game engine so that it's more flexible, 
-we would need to make further changes. 
-
-I tend to view **software design** more like **sculpting** than constructing. 
-You start with a big block of code and chip away at it until it looks like what you want, 
-rather than a blueprint that you follow to get the perfect house.
-
-Some of the aspects of our design that this test is revealing are as follows:
-
-• It's not easy to create new `Walk` structures.
-• The `game` module is far more coupled to `web-sys` and `wasm-bindgen` than we thought.
-
-We made the intentional choice not to try and create perfect abstractions early in the project. 
-This is one of the reasons we didn't write this code in a test-driven style initially.
-TDD would have strongly pushed in the direction of further abstraction and layering,
-which would have hidden the game code we're trying to learn here. 
-
-As an example, instead of using `HtmlImageElement` or `AudioBuffer`, 
-we may have written wrappers or abstractions around those objects 
-(we already have an Image struct), which is probably better for growing our project 
-in the medium to long term but is harder to understand in the short term.
-
-This is a long-winded way of saying that this code is now hard to write isolated unit tests
-for because we didn't build it with them in mind. 
-
-If you were able to run this test, you would see the following:
-
-```
-thread 'game::tests::test_transition_from_game_over_to_new_
-game' panicked at 'cannot call wasm-bindgen imported functions
-on non-wasm targets', /Users/eric/.cargo/registry/src/
-github.com-1ecc6299db9ec823/web-sys-0.3.52/src/features/gen_HtmlImageElement.rs:4:1
-```
-
-It turns out that even though we replaced the production `browser` with `test_browser`, 
-we're still trying to call browser code. 
-I have already pointed out `HtmlElement` and `JsValue`, 
-but this test also includes `AudioBuffer` and `AudioBufferOptions`. 
-
-As is, this code doesn't compile without more feature flags being enabled and changes being made to engine. 
-
-It's just too tightly coupled to the browser still.
-
-The act of trying to use this code in a test harness demonstrated the power of coupling,
-and it is often useful to take legacy code and get it into a harness to identify these
-dependency problems and break them. 
-
-Unfortunately, this is a time-consuming process that we are not going to continue using in this section, 
-although it may appear on my blog at paytonrules.com at some point. 
-Still waiting but See: [Mock Objects (manually) in Rust](https://paytonrules.com/post/mock-objects-in-rust/)
-
-Instead, we'll test this code via a test that runs in the browser.
-
-#### Browser tests
-
-At the beginning of this chapter, I mentioned that there were *unit tests* and *browser tests*.
-The distinction is that while browser tests may test the same behavior as a unit test, they
-automate the desired behavior in a headless browser.  
-This makes the test more realistic, but also slower and more prone to breaking for flaky reasons. 
-
-I prefer my systems to have a large base of unit tests and a smaller number of more integrated tests 
-to make sure everything is all wired together correctly, but we can't always get what we want.
-
-Instead, we'll get what we need – verification of the behavior – by skipping dependency-breaking techniques 
-for legacy code and writing a test that runs in the browser. 
-
-We'll remove the code that added the `test_browser` module, as well as the `test_browser` file itself. 
-
-We'll keep the test we wrote previously and make two changes for it to compile, as follows:
-
-1. Add `AudioBufferOptions` to the list of `web-sys` features in `Cargo.toml`.
-
-```toml
-[dependencies.web-sys]
-version = "0.3.64"
-features = ["console",
             ...
-            "AudioDestinationNode",
-            "AudioBufferOptions",
-           ]
-
 ```
 
-2. In the `engine` module, make the `buffer` field on the `Sound` struct `public` so that
-we can create `Sound` directly in this test.
+Here, we have changed the `browser::hide_ui()` line to 
+`if let Err(err) = browser::hide_ui()` and we log if an error occurs. 
+We can see what that error log will look like by forcing `hide_ui` to return an error for a moment:
 
-```rust
-// src/engine.rs
 
+![A fake error](./readme_pix/fake_error.png)
 
-#[derive(Clone)]
-pub struct Sound {
-    //buffer: AudioBuffer,
-    pub buffer: AudioBuffer,
+The stack trace is cut off in book form, but you can see that we got an error log 
+with `Error hiding the browser` and then This is the error in the `hide_ui` function, 
+which is the error message I forced into `hide_ui`. 
+The stack trace also shows `game::Ready`, 
+which would show you that you were transitioning into the `Ready` state 
+if you had infinite room to show the entire message.
 
-}
+Every single warning that's being generated should be dealt with. Most of the warnings
+are the same kind – that is, Result types where the Err variant is ignored. These can
+be removed by handling the Err case with a log or by calling panic if the game should
+truly crash at this time. 
+For the most part, I've used the if let pattern but if `request_animation_frame` fails, 
+then I just use unwrap. 
+I don't see how the game could work if that's failing.
 
-```
+There is one more warning we've been ignoring that we should address, as shown here:
 
-These two changes will get the code compiling, but it won't make it run in the tests yet.
-For that, we need to make a couple of changes. 
 
-First, we need to change the `#[test]` macro to `#[wasm_bindgen_test]`. 
-Then, we need to add two statements to our `test` module.
-
-```
-    use wasm_bindgen_test::wasm_bindgen_test;
-    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
-```
-
-As shown here:
-
-```rust
-// src/game.rs
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use futures::channel::mpsc::unbounded;
-    use std::collections::HashMap;
-    use web_sys::{AudioBuffer, AudioBufferOptions};
-
-    use wasm_bindgen_test::wasm_bindgen_test;
-    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
-
-    //#[test]
-    #[wasm_bindgen_test]
-    fn test_transition_from_game_over_to_new_game() {
-        ...
-
-```
-
-The first line to add is `use wasm_bindgen_test::wasm_bindgen_test` so that
-the macro is present. 
-
-The second is `wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);`. 
-This directive tells the test runner to run in the browser so that the code 
-can interact with the DOM, similar to how the application does. 
-
-This test won't run in cargo test, 
-so you'll need to use the `wasm-pack test --headless` `–chrome` or `-firefox` command. 
-
-This will run the web tests in a headless version of the browser. 
-
-`$ wasm-pack test --headless --firefox`
-
-When you run them, you should see the following output:
-
-```
-...
-running 1 test                                    
-
-test walk_the_dog::game::tests::test_transition_from_game_over_to_new_game ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored
-
-...
-```
-
-Now, we have a test that's running and passing, but the only problem is that we don't
-have any assertions. We've written an "arrange" step but we haven't checked the results.
-The point of this test was to make sure that the UI was hidden when the state transition
-happened, so we'll need to update the test to check that. We can do this by adding the
-action and assertion steps, as shown here:
-
-```rust
-// src/game.rs
-
-...
-#[cfg(test)]
-mod tests {
-    ...
-    #[wasm_bindgen_test]
-    fn test_transition_from_game_over_to_new_game() {
-            ...
-            timeline: 0,
-        };
-        // ASSERTION
-        let document = browser::document().unwrap();
-        document
-            .body()
-            .unwrap()
-            .insert_adjacent_html("afterbegin", "<div id='ui'></div>")
-            .unwrap();
-
-        browser::draw_ui("<p>This is the UI</p>").unwrap();
-
-        let state = WalkTheDogState {
-            _state: GameOver {
-                new_game_event: receiver,
-            },
-            walk: walk,
-        };
-        
-        // ASSERTION
-        state.new_game();
-        let ui = browser::find_html_element_by_id("ui").unwrap();
-        assert_eq!(ui.child_element_count(), 0);
-
-    }//^-- fn test_transition_from_game_over_to_new_game
-}//-- mod tests
-```
-
-Here, we start the test by inserting the `div` property, along with the `ui ID`, 
-into the document – after all, that is in `index.html` in the game. 
-
-Then, `browser::draw_ui` draws the `UI` to the browser, even though the browser 
-is running headlessly, so we don't see it. 
-
-We continue by creating `WalkTheDogState` in the `GameOver` state; on the next
-line, we have it transition to `Ready` via the `state.new_game()` method. 
-
-Finally, we check that the `UI` was cleared by finding the `div` property 
-and checking its `child_element_count`. If it's 0, the code is right, and this test will pass. 
-
-If you run this test, you'll see that this test does pass, so you will probably want to comment out 
-the `let next_state: WalkTheDogState<Ready> = state.new_game ()` line 
-and run it again just to make sure it fails when the transition happens.
-
-NOTE: 
-Bad book editing. Make it fait by commenting  `state.new_game()`.
-
-as in 
-
-```rust
-...
-        //state.new_game();
-        let ui = browser::find_html_element_by_id("ui").unwrap();
-        assert_eq!(ui.child_element_count(), 0);
-...
-```
-
-Test output:
-
-```
-test walk_the_dog::game::tests::test_transition_from_game_over_to_new_game ... FAIL
-
-failures:
-
----- walk_the_dog::game::tests::test_transition_from_game_over_to_new_game output ----
-    error output:
-        panicked at src/game.rs:1235:9:
-        assertion `left == right` failed
-          left: 1
-         right: 0
-
-```
-
-This is still a very long test but at least it's working. 
-
-The test can be cleaned up by creating some factory methods in the various modules 
-so that structs are easier to create. 
-You'll notice that the test is full of unwrap calls. 
-This is because, in a test, I want things to crash right away if they aren't as expected. 
-
-Unfortunately, browser-based tests with the `wasm_bindgen_test` macro do not let 
-you return a `Result` for readability as standard Rust tests do yet. 
-This is another reason you should try and make your tests run as native Rust tests.
-
-### Async tests
-
-One of the biggest challenges of testing web applications, whether they're Wasm or
-traditional JavaScript ones, is code that occurs asynchronously. 
-
-In the case of our code, that's anything that runs in an `async` block or function. 
-
-Imagine calling a function in an `async` test and then immediately trying to verify it worked. 
-By definition, you can't, because it's running asynchronously and may not have finished yet. 
-
-Fortunately, `wasm_bindgen_test` handles this rather easily by making the test's 
-functions async themselves.
-
-Let's look at a simpler example and try to write a test 
-for the `load_json` function in the `browser` module:
-
-```rust
-// src/browser.rs
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use wasm_bindgen_test::wasm_bindgen_test;
-    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
-
-    #[wasm_bindgen_test]
-    async fn test_error_loading_json() {
-        let json = fetch_json("not_there.json").await;
-        assert_eq!(json.is_err(), true);
-    }
-}
-```
-This can be found in the browser module. 
-
-Here, we start with the boilerplate to set up a tests module, 
-bring into scope both `browser` and `wasm_bindgen_test`, 
-
-```
-    use super::*;
-    use wasm_bindgen_test::wasm_bindgen_test;
-```
-
-and configure the test to run in the browser. 
-
-```
-    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
-```
-
-The test itself is only two lines.
-Try to load a JSON file that doesn't exist and report an error. 
-
-The key difference between this is that the test is `async`, 
-which allows us to use await in the test and write the assertion 
-without adding any "wait for" logic. 
-
-This is great, but there are a couple of things to keep in mind:
-
-• If fetch_json can hang, this test will hang.
-• This test will try to load a file. Ideally, we don't want to do this in a unit test.
-
-This test will run and pass. 
-We could test all of the browser functions this way, 
-accepting that the browser module's tests will use the filesystem as needed. 
-
-That's probably what I would do if I was handed this system in a professional environment. 
-
-You could work very hard to stub out the actual browser on these tests, 
-but to do so would remove its ability to prevent defects. 
-
-After all, if you remove the browser from the browser module, 
-then how do you know you got the code right?
-
-OUTPUT:
-
-```
-    Finished test [unoptimized + debuginfo] target(s) in 0.02s
-     Running unittests src/lib.rs (target/wasm32-unknown-unknown/debug/deps/walk_the_dog-ef9df5f7585ca5f5.wasm)
-Set timeout to 20 seconds...
-Running headless tests in Firefox on `http://127.0.0.1:34465/`
-Try find `webdriver.json` for configure browser's capabilities:
-Not found
-running 2 tests                                   
-
-test walk_the_dog::browser::tests::test_error_loading_json ... ok
-test walk_the_dog::game::tests::test_transition_from_game_over_to_new_game ... ok
-
-test result: ok. 2 passed; 0 failed; 0 ignored
-     Running tests/app.rs (target/wasm32-unknown-unknown/debug/deps/app-f143509e4e2c9db9.wasm)
-Set timeout to 20 seconds...
-Running headless tests in Firefox on `http://127.0.0.1:45413/`
-Try find `webdriver.json` for configure browser's capabilities:
-Not found
-running 1 test                                    
-
-test app::web_test ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored
-```
 
 ---------
 
 
 ```rust
-// tests/app.rs
+// src/game.rs
 
 
 

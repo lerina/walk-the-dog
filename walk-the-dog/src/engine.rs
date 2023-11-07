@@ -124,6 +124,7 @@ impl Image {
         renderer.draw_entire_image(&self.element, &self.bounding_box.position);
     }
 
+    #[allow(dead_code)]
     pub fn draw_rect(&self, renderer: &Renderer) {
         renderer.draw_rect(self.bounding_box());
     }
@@ -201,6 +202,7 @@ impl Renderer {
     }//^-- draw_entire_image
     
     //for debuging
+    #[allow(dead_code)]
     pub fn draw_rect(&self, bounding_box: &Rect) {
         self.context.set_stroke_style(&JsValue::from_str("#FF0000"));
         self.context.begin_path();
@@ -264,7 +266,10 @@ pub struct GameLoop {
 type SharedLoopClosure = Rc<RefCell<Option<LoopClosure>>>;
 
 impl GameLoop {
-    pub async fn start(mut game: impl Game + 'static) -> Result<()> {
+
+    //pub async fn start(mut game: impl Game + 'static) -> Result<()> {
+    pub async fn start(game: impl Game) -> Result<()> {
+    
         let mut keyevent_receiver = prepare_input()?;
         let mut game = game.initialize().await?;
         let mut game_loop = GameLoop {
@@ -315,6 +320,7 @@ enum KeyPress {
 }
 
 
+#[derive(Debug)]
 pub struct KeyState {
     pressed_keys: HashMap<String, web_sys::KeyboardEvent>,
 }
